@@ -1,6 +1,6 @@
 import ky from 'ky';
 
-import { relay } from './constants.js';
+import { RELAY_URL } from './constants.js';
 import logger from './logger.js';
 import { ServerDescription } from './types.js';
 
@@ -35,7 +35,7 @@ export function sanitizePDSName(pds: string): string {
 // {"did":"did:web:zio.blue","availableUserDomains":[".zio.blue"],"inviteCodeRequired":true,"links":{},"contact":{}}
 // {"did":"did:web:hellthread.pro","availableUserDomains":[".hellthread.pro"],"inviteCodeRequired":true,"links":{},"contact":{}}
 export async function isPDSHealthy(pds: string) {
-  if (pds === relay) {
+  if (pds === RELAY_URL) {
     return true;
   }
 

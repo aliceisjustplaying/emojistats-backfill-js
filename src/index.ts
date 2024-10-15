@@ -1,20 +1,26 @@
 import axios from 'axios';
 import 'dotenv/config';
 import Database from 'libsql';
-import { open } from 'node:fs/promises';
 import fs from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 import pLimit from 'p-limit';
 import readline from 'readline';
 
-import { PLCDbPath, relay } from './constants.js';
+import {
+  DATA_OUTPUT_FILE,
+  DIDS_TO_PROCESS,
+  HEALTH_CHECK_FILE,
+  PDS_DATA_FETCH_CONCURRENCY,
+  PDS_HEALTH_CHECK_CONCURRENCY,
+  PLC_DB_PATH,
+  RELAY_URL,
+  SQL_OUTPUT_FILE,
+} from './constants.js';
 import { isPDSHealthy, sanitizePDSName } from './helpers.js';
 import logger from './logger.js';
-import { DIDsFromDB, PDSDIDGrouped, PDSHealthStatus } from './types.js';
+import { BskyData, DIDsFromDB, PDSDIDGrouped, PDSHealthStatus } from './types.js';
 
-const db = new Database(PLCDbPath);
-const OUTPUT_FILE = 'dids_pds.jsonl';
-const HEALTH_CHECK_FILE = 'pds_health.json';
+const db = new Database(PLC_DB_PATH);
 
 async function fetchAndDumpDidsPdses() {
   logger.info('Fetching DIDs from database');
@@ -39,8 +45,8 @@ async function fetchAndDumpDidsPdses() {
     ORDER BY identity.did ASC
   `);
 
-  const writeFile = await open(OUTPUT_FILE, 'w');
-  const writeStream = writeFile.createWriteStream();
+  const plcDbFile = await fs.open(SQL_OUTPUT_FILE, 'w');
+  const plcDbWriteStream = plcDbFile.createWriteStream();
 
   let count = 0;
   let lastLogTime = performance.now();
@@ -60,17 +66,17 @@ async function fetchAndDumpDidsPdses() {
       .trim();
     const finalEndpoint =
       processedEndpoint.includes('bsky.social') || processedEndpoint.includes('bsky.network') ?
-        relay
+        RELAY_URL
       : processedEndpoint;
 
-    writeStream.write(JSON.stringify({ did, pds: finalEndpoint }) + '\n');
+    plcDbWriteStream.write(JSON.stringify({ did, pds: finalEndpoint }) + '\n');
   }
 
-  writeStream.close();
+  plcDbWriteStream.close();
   const endTime = performance.now();
   const totalTime = (endTime - startTime) / 1000;
   const averageSpeed = count / totalTime;
-  logger.info(`Data dumped to ${OUTPUT_FILE}`);
+  logger.info(`Data dumped to ${SQL_OUTPUT_FILE}`);
   logger.info(`Total DIDs processed: ${count}`);
   logger.info(`Total time: ${totalTime.toFixed(2)} seconds`);
   logger.info(`Average speed: ${averageSpeed.toFixed(2)} DIDs/second`);
@@ -80,7 +86,7 @@ async function checkAllPDSHealth() {
   const startTime = performance.now();
   logger.info('Starting to process data from file');
 
-  const readFile = await open(OUTPUT_FILE, 'r');
+  const readFile = await fs.open(SQL_OUTPUT_FILE, 'r');
   const fileStream = readFile.createReadStream();
   const rl = readline.createInterface({
     input: fileStream,
@@ -121,7 +127,7 @@ async function checkAllPDSHealth() {
   } catch {
     logger.info('No existing health check data found, performing health checks');
 
-    const limit = pLimit(20);
+    const limit = pLimit(PDS_HEALTH_CHECK_CONCURRENCY);
 
     logger.info('Checking PDS health status');
 
@@ -172,8 +178,8 @@ async function checkAllPDSHealth() {
 }
 
 async function processDidsAndFetchData(dids: { did: string; pds: string }[]) {
-  const limit = pLimit(5);
-  const fetchedData: any[] = []; // Replace 'any' with a specific type if available
+  const limit = pLimit(PDS_DATA_FETCH_CONCURRENCY);
+  const fetchedData: BskyData[] = [];
   let successfulRequests = 0;
   let unsuccessfulRequests = 0;
   let successfulDids = 0;
@@ -182,6 +188,7 @@ async function processDidsAndFetchData(dids: { did: string; pds: string }[]) {
   const tasks = dids.map(({ did, pds }) =>
     limit(async () => {
       try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         const res = await axios.post(
           'http://localhost:8000/fetch',
           { did, pds },
@@ -193,10 +200,11 @@ async function processDidsAndFetchData(dids: { did: string; pds: string }[]) {
 
         successfulRequests++;
 
-        return new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
           let buffer = '';
           let didSucceeded = false;
 
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           res.data.on('data', (chunk: Buffer) => {
             buffer += chunk.toString();
             let boundary = buffer.indexOf('\n');
@@ -205,7 +213,7 @@ async function processDidsAndFetchData(dids: { did: string; pds: string }[]) {
               buffer = buffer.substring(boundary + 1);
               if (line.trim()) {
                 try {
-                  const json = JSON.parse(line);
+                  const json = JSON.parse(line) as BskyData;
                   fetchedData.push(json);
                   didSucceeded = true;
                 } catch (err) {
@@ -216,10 +224,11 @@ async function processDidsAndFetchData(dids: { did: string; pds: string }[]) {
             }
           });
 
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           res.data.on('end', () => {
             if (buffer.trim()) {
               try {
-                const json = JSON.parse(buffer);
+                const json = JSON.parse(buffer) as BskyData;
                 fetchedData.push(json);
                 didSucceeded = true;
               } catch (err) {
@@ -234,12 +243,14 @@ async function processDidsAndFetchData(dids: { did: string; pds: string }[]) {
             resolve();
           });
 
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           res.data.on('error', (err: Error) => {
             logger.error(`Stream error for DID ${did}: ${err.message}`);
             failedDids++;
             reject(err);
           });
         });
+        return;
       } catch (error) {
         logger.error(`Error fetching data for DID ${did}: ${(error as Error).message}`);
         unsuccessfulRequests++;
@@ -252,13 +263,21 @@ async function processDidsAndFetchData(dids: { did: string; pds: string }[]) {
   logger.info(`Fetched data for ${fetchedData.length} DIDs.`);
   logger.info(`Successful requests: ${successfulRequests}, Unsuccessful requests: ${unsuccessfulRequests}`);
   logger.info(`Successful DIDs: ${successfulDids}, Failed DIDs: ${failedDids}`);
+
+  const writeFile = await fs.open(DATA_OUTPUT_FILE, 'w');
+  const writeStream = writeFile.createWriteStream();
+  for (const data of fetchedData) {
+    writeStream.write(JSON.stringify(data) + '\n');
+  }
+  writeStream.close();
+  logger.info(`Streamed fetched data to ${DATA_OUTPUT_FILE}`);
   return fetchedData;
 }
 
 async function main() {
   if (
     !(await fs
-      .access(OUTPUT_FILE)
+      .access(SQL_OUTPUT_FILE)
       .then(() => true)
       .catch(() => false))
   ) {
@@ -289,23 +308,19 @@ async function main() {
   // Prepare the list of DIDs to process
   const allDids: { did: string; pds: string }[] = [];
 
-  // Collect DIDs from healthy PDSes
   for (const [pds, dids] of Object.entries(healthyGroupedByPDS)) {
     for (const did of dids) {
       allDids.push({ did, pds });
     }
   }
 
-  logger.info(`Total DIDs to process: ${allDids.length}`);
+  logger.info(`Total DIDs from DB: ${allDids.length}`);
 
-  // Process the first 100k DIDs
-  const howMany = 1000;
-  const didsToProcess = allDids.slice(0, howMany);
+  const didsToProcess = allDids.slice(0, DIDS_TO_PROCESS);
   logger.info(`Processing the first ${didsToProcess.length} DIDs for testing.`);
 
   const fetchedData = await processDidsAndFetchData(didsToProcess);
 
-  // Now you can use `fetchedData` as needed
   logger.info(`Fetched data array length: ${fetchedData.length}`);
 }
 
