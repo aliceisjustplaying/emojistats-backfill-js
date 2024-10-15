@@ -12,9 +12,18 @@
     "lint:fix": "bunx eslint --fix ."
   },
   "dependencies": {
+    "@types/big-json": "^3.2.5",
+    "@types/cli-progress": "^3.11.6",
+    "@types/terminal-kit": "^2.5.6",
+    "big-json": "^3.2.0",
+    "cli-progress": "^3.12.0",
     "dotenv": "^16.4.5",
+    "ky": "^1.7.2",
+    "libsql": "^0.4.6",
+    "p-limit": "^6.1.0",
     "pino": "^9.4.0",
-    "pino-pretty": "^11.2.2"
+    "pino-pretty": "^11.2.2",
+    "terminal-kit": "^3.1.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.12.0",
@@ -25,7 +34,7 @@
     "prettier": "^3.3.3",
     "tsx": "^4.19.1",
     "typescript": "^5.6.3",
-    "typescript-eslint": "^8.8.1"
+    "typescript-eslint": "^8.9.0"
   },
   "author": "alice",
   "license": "MIT"
