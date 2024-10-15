@@ -4,48 +4,55 @@ import { relay } from './constants.js';
 import logger from './logger.js';
 import { ServerDescription } from './types.js';
 
-// Sanitize PDS name by removing control characters
-function sanitizePDSName(pds: string): string {
-  return pds.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+export function sanitizePDSName(pds: string): string {
+  try {
+    const originalPDS = pds;
+    pds = pds.trim();
+    pds = pds.replace(/<\/?[^>]+(>|$)/g, '');
+    // eslint-disable-next-line no-control-regex
+    pds = pds.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+    pds = pds.replace(/[^a-zA-Z0-9-._~:/?#[\]!$&'()*+,;=]/g, '');
+    const hostnameWithPortRegex = /^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*(:\d{1,5})?$/;
+
+    if (!hostnameWithPortRegex.test(pds)) {
+      throw new Error(`Invalid PDS hostname format. Original: ${originalPDS}`);
+    }
+
+    try {
+      const url = new URL(`https://${pds}/`); // if this still throws, the PDS name is invalid
+      return pds;
+    } catch (error) {
+      throw new Error(`sanitizePDSName Error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } catch (error) {
+    throw new Error(`sanitizePDSName Error: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
 
-// Sample responses:
+// sample responses:
 // {"availableUserDomains": [], "did": "did:web:fed.brid.gy" }
 // {"availableUserDomains":[".boobee.blue"],"inviteCodeRequired":true,"links":{}}
 // {"did":"did:web:zio.blue","availableUserDomains":[".zio.blue"],"inviteCodeRequired":true,"links":{},"contact":{}}
 // {"did":"did:web:hellthread.pro","availableUserDomains":[".hellthread.pro"],"inviteCodeRequired":true,"links":{},"contact":{}}
-export async function isPDSHealthy(pds: string): Promise<boolean> {
-  const sanitizedPDS = sanitizePDSName(pds);
-
-  if (sanitizedPDS === relay) {
+export async function isPDSHealthy(pds: string) {
+  if (pds === relay) {
     return true;
   }
 
-  const maxRetries = 5;
-  const timeout = 30000; // 30 seconds
+  try {
+    const res = await ky.get(`https://${pds}/xrpc/com.atproto.server.describeServer`, {
+      timeout: 30000,
+      retry: {
+        limit: 5,
+        statusCodes: [429, 500, 502, 503, 504],
+      },
+    });
 
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const res = await ky.get(`https://${sanitizedPDS}/xrpc/com.atproto.server.describeServer`, {
-        timeout,
-        retry: {
-          limit: 1, // We'll handle retries manually
-          statusCodes: [429, 502, 503, 504],
-        },
-      });
+    const data: ServerDescription = await res.json();
 
-      const data: ServerDescription = await res.json();
-
-      return data.availableUserDomains !== undefined;
-    } catch (error: any) {
-      logger.error(`Attempt ${attempt} - Error checking health for PDS ${sanitizedPDS}: ${error}`);
-      if (attempt === maxRetries) {
-        return false;
-      }
-      // Wait before retrying (exponential backoff)
-      await new Promise((resolve) => setTimeout(resolve, 1000 * attempt));
-    }
+    return data.availableUserDomains !== undefined;
+  } catch (error) {
+    logger.error(`Error checking health for PDS ${pds}: ${error}`);
+    return false;
   }
-
-  return false;
 }
