@@ -28,16 +28,16 @@ export class PostgresBatchQueue {
       throw new Error('Cannot enqueue data, the queue is shutting down.');
     }
 
-    let shouldFlush = false;
-
-    await this.mutex.runExclusive(() => {
+    const shouldFlush = await this.mutex.runExclusive(() => {
       this.queue.push(data);
 
       if (this.queue.length >= this.batchSize) {
-        shouldFlush = true;
+        return true;
       } else if (!this.batchTimer) {
         this.scheduleFlush();
       }
+      
+      return false;
     });
 
     if (shouldFlush) {
