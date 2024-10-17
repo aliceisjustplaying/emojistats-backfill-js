@@ -19,6 +19,7 @@ export function sanitizePDSName(pds: string): string {
     }
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const url = new URL(`https://${pds}/`); // if this still throws, the PDS name is invalid
       return pds;
     } catch (error) {
@@ -43,7 +44,7 @@ export async function isPDSHealthy(pds: string) {
     const res = await ky.get(`https://${pds}/xrpc/com.atproto.server.describeServer`, {
       timeout: 30000,
       retry: {
-        limit: 5,
+        limit: 3,
         statusCodes: [429, 500, 502, 503, 504],
       },
     });
@@ -52,7 +53,7 @@ export async function isPDSHealthy(pds: string) {
 
     return data.availableUserDomains !== undefined;
   } catch (error) {
-    logger.error(`Error checking health for PDS ${pds}: ${error}`);
+    console.error(`Error checking health for PDS ${pds}: ${error}`);
     return false;
   }
 }

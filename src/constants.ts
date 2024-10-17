@@ -6,3 +6,4 @@ export const DATA_OUTPUT_FILE = 'bsky_data.jsonl';
 export const PDS_HEALTH_CHECK_CONCURRENCY = 20;
 export const PDS_DATA_FETCH_CONCURRENCY = 100;
 export const DIDS_TO_PROCESS = 20000;
+export const METRICS_PORT = 9501;

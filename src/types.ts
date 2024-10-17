@@ -1,10 +1,10 @@
-export interface DIDsFromDB {
+export interface DidAndPds {
   did: string;
-  endpoint: string;
+  pds: string;
 }
 
-export type PDSDIDGrouped = Record<string, string[]>;
-export type PDSHealthStatus = Record<string, boolean>;
+export type PdsToDidsMap = Record<string, string[] | undefined>;
+export type PdsHealthStatus = Record<string, boolean | undefined>;
 
 export interface ServerDescription {
   availableUserDomains?: string[];
@@ -14,17 +14,19 @@ export interface ServerDescription {
   contact?: Record<string, unknown>;
 }
 
+export interface BskyPostData {
+  text: string;
+  $type: string;
+  langs: string[];
+  createdAt: string;
+  cid: string;
+}
+
 export type BskyPost = Record<
   string,
   {
     cid: string;
-    value: {
-      text: string;
-      $type: string;
-      langs: string[];
-      createdAt: string;
-      cid: string;
-    };
+    value: BskyPostData;
   }
 >;
 
