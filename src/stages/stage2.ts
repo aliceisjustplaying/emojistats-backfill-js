@@ -1,10 +1,10 @@
-import { HEALTH_CHECK_FILE, PDS_HEALTH_CHECK_CONCURRENCY, SQL_OUTPUT_FILE } from "../constants.js";
-import fs from "node:fs/promises";
-import readline from "node:readline";
-import pLimit from "p-limit";
-import { isPDSHealthy, sanitizePDSName } from "../helpers.js";
-import { PdsToDidsMap, PdsHealthStatus } from "../types.js";
+import fs from 'node:fs/promises';
+import readline from 'node:readline';
+import pLimit from 'p-limit';
 
+import { HEALTH_CHECK_FILE, PDS_HEALTH_CHECK_CONCURRENCY, SQL_OUTPUT_FILE } from '../constants.js';
+import { isPDSHealthy, sanitizePDSName } from '../helpers.js';
+import { PdsHealthStatus, PdsToDidsMap } from '../types.js';
 
 export async function checkAllPDSHealth() {
   const startTime = performance.now();
@@ -32,7 +32,7 @@ export async function checkAllPDSHealth() {
     }
 
     const { did, pds } = JSON.parse(line) as { did: string; pds: string };
-     
+
     if (!groupedByPDS[pds]) {
       groupedByPDS[pds] = [];
     }
@@ -86,16 +86,16 @@ export async function checkAllPDSHealth() {
     const healthCheckEndTime = performance.now();
     const healthCheckTime = (healthCheckEndTime - healthCheckStartTime) / 1000;
     console.log(`Health check process took ${healthCheckTime.toFixed(2)} seconds`);
-  
+
     const healthyCount = Object.values(pdsHealthStatus).filter(Boolean).length;
     const unhealthyCount = Object.values(pdsHealthStatus).length - healthyCount;
     console.log(`Total PDS count: ${sanitizedPDSMap.size}`);
     console.log(`Healthy PDS count: ${healthyCount}`);
     console.log(`Unhealthy PDS count: ${unhealthyCount}`);
-  
+
     const endTime = performance.now();
     const totalTime = (endTime - startTime) / 1000;
-    console.log(`Total processing time: ${totalTime.toFixed(2)} seconds`);  
+    console.log(`Total processing time: ${totalTime.toFixed(2)} seconds`);
   }
 
   return { groupedByPDS, pdsHealthStatus };
@@ -123,7 +123,7 @@ export function selectAllDids(groupedByPDS: PdsToDidsMap, pdsHealthStatus: PdsHe
   console.log(`Total DIDs from unhealthy PDSes: ${totalUnhealthyDIDs}`);
 
   // Prepare the list of DIDs to process
-  const allDids: { did: string; pds: string; }[] = [];
+  const allDids: { did: string; pds: string }[] = [];
 
   for (const [pds, dids] of Object.entries(healthyGroupedByPDS)) {
     for (const did of dids!) {

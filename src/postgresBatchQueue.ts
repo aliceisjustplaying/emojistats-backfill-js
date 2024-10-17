@@ -1,10 +1,10 @@
 // src/postgresBatchQueue.ts
-
 import { Mutex } from 'async-mutex';
-import { db, closeDatabase } from './postgres.js';
-import { concurrentPostgresInserts } from './metrics.js';
-import { PostData } from './types.js';
+
 import { BATCH_SIZE, BATCH_TIMEOUT_MS, MAX_FLUSH_RETRIES } from './constants.js';
+import { concurrentPostgresInserts } from './metrics.js';
+import { closeDatabase, db } from './postgres.js';
+import { PostData } from './types.js';
 
 export class PostgresBatchQueue {
   private queue: PostData[] = [];
@@ -50,7 +50,7 @@ export class PostgresBatchQueue {
    */
   private scheduleFlush(): void {
     this.batchTimer = setTimeout(() => {
-      this.flushQueue().catch((err) => {
+      this.flushQueue().catch((err: unknown) => {
         console.error(`Scheduled flush error: ${(err as Error).message}`);
       });
     }, this.batchTimeoutMs);

@@ -1,8 +1,7 @@
 // src/shutdown.ts
-
-import { postgresBatchQueue } from './postgresBatchQueue.js';
-import { closeDatabase } from './postgres.js';
 import { stopMetricsServer } from './metrics.js';
+import { closeDatabase } from './postgres.js';
+import { postgresBatchQueue } from './postgresBatchQueue.js';
 
 export async function gracefulShutdown(): Promise<void> {
   console.log('Initiating graceful shutdown...');
@@ -21,14 +20,14 @@ export async function gracefulShutdown(): Promise<void> {
 
 // Register shutdown handlers
 export function registerShutdownHandlers() {
-  process.on('SIGINT', gracefulShutdown);
-  process.on('SIGTERM', gracefulShutdown);
-  process.on('uncaughtException', async (err) => {
+  process.on('SIGINT', () => void gracefulShutdown());
+  process.on('SIGTERM', () => void gracefulShutdown());
+  process.on('uncaughtException', (err) => {
     console.error('Uncaught Exception:', err);
-    await gracefulShutdown();
+    void gracefulShutdown();
   });
-  process.on('unhandledRejection', async (reason, promise) => {
+  process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
-    await gracefulShutdown();
+    void gracefulShutdown();
   });
 }

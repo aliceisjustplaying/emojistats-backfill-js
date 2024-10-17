@@ -1,10 +1,10 @@
 import { DIDS_TO_PROCESS, METRICS_PORT } from './constants.js';
+import { startMetricsServer } from './metrics.js';
 import { gracefulShutdown, registerShutdownHandlers } from './shutdown.js';
 import { fetchAndDumpDidsPdses } from './stages/stage1.js';
 import { checkAllPDSHealth, selectAllDids } from './stages/stage2.js';
 import { processDidsAndFetchData } from './stages/stage3.js';
 import { DidAndPds } from './types.js';
-import { startMetricsServer, stopMetricsServer } from './metrics.js';
 
 async function main() {
   // Register graceful shutdown handlers

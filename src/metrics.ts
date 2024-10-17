@@ -1,9 +1,9 @@
 import { monitorPgPool } from '@christiangalsterer/node-postgres-prometheus-exporter';
 import express from 'express';
+import { Server } from 'http';
 import { Gauge, Registry, collectDefaultMetrics } from 'prom-client';
 
 import { pool } from './postgres.js';
-import { Server } from 'http';
 
 const register = new Registry();
 collectDefaultMetrics({ register });
@@ -47,18 +47,14 @@ export const startMetricsServer = (port: number, host = '127.0.0.1') => {
 
 export function stopMetricsServer(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (metricsServer) {
-      metricsServer.close((err) => {
-        if (err) {
-          console.error('Error shutting down metrics server:', err);
-          reject(err);
-        } else {
-          console.log('Metrics server shut down successfully.');
-          resolve();
-        }
-      });
-    } else {
-      resolve();
-    }
+    metricsServer.close((err) => {
+      if (err) {
+        console.error('Error shutting down metrics server:', err);
+        reject(err);
+      } else {
+        console.log('Metrics server shut down successfully.');
+        resolve();
+      }
+    });
   });
 }

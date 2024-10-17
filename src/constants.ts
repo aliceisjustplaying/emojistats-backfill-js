@@ -1,4 +1,5 @@
 import 'dotenv/config';
+
 export const RELAY_URL = process.env.RELAY_URL!;
 export const PLC_DB_PATH = process.env.PLC_DB_PATH!;
 export const METRICS_PORT = parseInt(process.env.METRICS_PORT!, 10);
