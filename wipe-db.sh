@@ -1,5 +1,6 @@
 #!/bin/bash
 direnv allow
+valkey-cli flushall
 psql "$DATABASE_URL" -c '
 TRUNCATE TABLE posts RESTART IDENTITY CASCADE;
 TRUNCATE TABLE profiles RESTART IDENTITY CASCADE;

@@ -3,6 +3,7 @@ import 'dotenv/config';
 export const RELAY_URL = process.env.RELAY_URL!;
 export const PLC_DB_PATH = process.env.PLC_DB_PATH!;
 export const METRICS_PORT = parseInt(process.env.METRICS_PORT!, 10);
+export const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 export const SQL_OUTPUT_FILE = 'dids_pds.jsonl';
 export const HEALTH_CHECK_FILE = 'pds_health.json';
 export const DATA_OUTPUT_FILE = 'bsky_data.jsonl';

@@ -2,6 +2,7 @@
 import { closeDatabase } from './db/postgres.js';
 import { postBatchQueue, profileBatchQueue } from './db/postgresBatchQueues.js';
 import { stopMetricsServer } from './metrics.js';
+import { redis } from './redis.js';
 
 export async function gracefulShutdown(): Promise<void> {
   console.log('Initiating graceful shutdown...');
@@ -11,6 +12,8 @@ export async function gracefulShutdown(): Promise<void> {
     console.log('All pending batches have been flushed.');
     await closeDatabase();
     console.log('Database connections closed.');
+    await redis.quit();
+    console.log('Redis client disconnected.');
     process.exit(0);
   } catch (err) {
     console.error(`Error during shutdown: ${(err as Error).message}`);

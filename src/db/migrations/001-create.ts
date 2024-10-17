@@ -19,7 +19,8 @@ export async function createTables() {
       has_emojis BOOLEAN NOT NULL DEFAULT FALSE,
       langs TEXT[] NOT NULL DEFAULT '{}',
       text TEXT,
-      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'utc')
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'utc'),
+      UNIQUE (did, cid, rkey)
     );
 
     CREATE TABLE IF NOT EXISTS emojis (
@@ -38,7 +39,8 @@ export async function createTables() {
       rkey TEXT NOT NULL, -- ~13 characters
       description TEXT,
       display_name TEXT,
-      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'utc')
+      created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT (now() at time zone 'utc'),
+      UNIQUE (did, cid, rkey)
     );
   `);
 }

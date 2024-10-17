@@ -1,6 +1,8 @@
 export interface DidAndPds {
   did: string;
   pds: string;
+  status?: 'pending' | 'processing' | 'completed' | 'failed';
+  error?: string;
 }
 
 export type PdsToDidsMap = Record<string, string[] | undefined>;

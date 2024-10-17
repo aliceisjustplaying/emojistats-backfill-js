@@ -1,5 +1,6 @@
 import { DIDS_TO_PROCESS, METRICS_PORT } from './constants.js';
 import { startMetricsServer } from './metrics.js';
+import { redis } from './redis.js';
 import { gracefulShutdown, registerShutdownHandlers } from './shutdown.js';
 import { fetchAndDumpDidsPdses } from './stages/stage1.js';
 import { checkAllPDSHealth, selectAllDids } from './stages/stage2.js';
@@ -12,6 +13,9 @@ async function main() {
 
   // start metrics server
   startMetricsServer(METRICS_PORT);
+
+  // connect to redis
+  await redis.connect();
 
   // stage 1
   await fetchAndDumpDidsPdses();

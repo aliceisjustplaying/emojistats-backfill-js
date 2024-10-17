@@ -4,6 +4,7 @@ import pLimit from 'p-limit';
 import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS } from '../constants.js';
 import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js';
 import { sanitizeTimestamp } from '../helpers.js';
+import { redis } from '../redis.js';
 import {
   BskyData,
   BskyPost,
@@ -24,6 +25,19 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
 
   const tasks = dids.map(({ did, pds }) =>
     limit(async () => {
+      const status = await redis.get(`${did}:status`);
+      if (status === 'completed' || status === 'failed') {
+        process.stdout.write('~');
+        return;
+      }
+
+      // in theory this happens when we're resuming processing after a crash
+      if (status === 'processing') {
+        console.log(`Resuming processing for DID ${did}`);
+      }
+
+      await redis.set(`${did}:status`, 'processing');
+
       try {
         const res = await axios.post(
           'http://localhost:8000/fetch',
@@ -112,6 +126,9 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
               }
             }
             successfulDids++;
+            redis.set(`${did}:status`, 'completed').catch((err: unknown) => {
+              console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
+            });
             if (successfulDids % 100 === 0) {
               // process.stdout.write('#');
               console.log(`Processed ${successfulDids} DIDs.`);
@@ -122,6 +139,9 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
           // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           res.data.on('error', (err: Error) => {
             console.error(`Stream error for DID ${did}: ${err.message}`);
+            redis.set(`${did}:status`, 'failed').catch((err: unknown) => {
+              console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
+            });
             failedDids++;
             if (failedDids % 100 === 0) {
               // process.stdout.write('*');

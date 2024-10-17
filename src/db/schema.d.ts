@@ -14,9 +14,10 @@ export type Timestamp = ColumnType<Date, Date | string>;
 export interface Emojis {
   created_at: Generated<Timestamp>;
   emoji: string;
-  id: Generated<number>;
+  id: Generated<Int8>;
   lang: string;
-  post_id: number;
+  post_id: Int8 | null;
+  profile_id: Int8 | null;
 }
 
 export interface Posts {
@@ -24,7 +25,7 @@ export interface Posts {
   created_at: Generated<Timestamp>;
   did: string;
   has_emojis: Generated<boolean>;
-  id: Generated<number>;
+  id: Generated<Int8>;
   langs: Generated<string[]>;
   rkey: string;
   text: string | null;
