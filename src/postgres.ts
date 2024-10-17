@@ -21,4 +21,8 @@ const db = new Kysely<DB>({
   dialect,
 });
 
-export { pool, db };
+async function closeDatabase() {
+  await db.destroy();
+}
+
+export { closeDatabase, pool, db };

@@ -1,10 +1,8 @@
-import 'dotenv/config';
 import Database from 'libsql';
 import fs from 'node:fs/promises';
 import { performance } from 'node:perf_hooks';
 
 import { PLC_DB_PATH, RELAY_URL, SQL_OUTPUT_FILE } from '../constants.js';
-import logger from '../logger.js';
 import { DidAndPds } from '../types.js';
 
 const didDb = new Database(PLC_DB_PATH);

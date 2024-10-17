@@ -1,63 +1,38 @@
-import 'dotenv/config';
-
-import {
-  DIDS_TO_PROCESS,
-} from './constants.js';
-import logger from './logger.js';
+import { DIDS_TO_PROCESS, METRICS_PORT } from './constants.js';
+import { gracefulShutdown, registerShutdownHandlers } from './shutdown.js';
 import { fetchAndDumpDidsPdses } from './stages/stage1.js';
-import { processDidsAndFetchData } from './stages/stage3.js';
 import { checkAllPDSHealth, selectAllDids } from './stages/stage2.js';
-
-
+import { processDidsAndFetchData } from './stages/stage3.js';
+import { DidAndPds } from './types.js';
+import { startMetricsServer, stopMetricsServer } from './metrics.js';
 
 async function main() {
+  // Register graceful shutdown handlers
+  registerShutdownHandlers();
+
+  // start metrics server
+  startMetricsServer(METRICS_PORT);
+
   // stage 1
   await fetchAndDumpDidsPdses();
 
   // stage 2
   const { groupedByPDS, pdsHealthStatus } = await checkAllPDSHealth();
-  const allDids: { did: string; pds: string; }[] = selectAllDids(groupedByPDS, pdsHealthStatus);
+  const allDids: DidAndPds[] = selectAllDids(groupedByPDS, pdsHealthStatus);
 
   // stage 3
   const didsToProcess = allDids.slice(0, DIDS_TO_PROCESS);
   console.log(`Processing ${didsToProcess.length} DIDs`);
 
-  const fetchedData = await processDidsAndFetchData(didsToProcess);
+  await processDidsAndFetchData(didsToProcess);
 
-  console.log(`Fetched data array length: ${fetchedData.length}`);
+  await gracefulShutdown();
+
+  // console.log(`Fetched data array length: ${fetchedData.length}`);
 }
 
-main().catch((error: unknown) => {
+main().catch(async (error: unknown) => {
   console.error(`Unexpected error: ${error instanceof Error ? error.message : String(error)}`);
+  await gracefulShutdown();
   process.exit(1);
-});
-
-let isShuttingDown = false;
-
-
-async function shutdown() {
-  if (isShuttingDown) {
-    console.log('Shutdown called but one is already in progress.');
-    return;
-  }
-
-  isShuttingDown = true;
-
-  console.log('Shutting down gracefully...');
-
-  process.exit(0);
-}
-
-process.on('SIGINT', () => {
-  shutdown().catch((error: unknown) => {
-    console.error(`Shutdown failed: ${(error as Error).message}`);
-    process.exit(1);
-  });
-});
-
-process.on('SIGTERM', () => {
-  shutdown().catch((error: unknown) => {
-    console.error(`Shutdown failed: ${(error as Error).message}`);
-    process.exit(1);
-  });
 });

@@ -1,7 +1,6 @@
 import ky from 'ky';
 
 import { RELAY_URL } from './constants.js';
-import logger from './logger.js';
 import { ServerDescription } from './types.js';
 
 export function sanitizePDSName(pds: string): string {
@@ -56,4 +55,8 @@ export async function isPDSHealthy(pds: string) {
     console.error(`Error checking health for PDS ${pds}: ${error}`);
     return false;
   }
+}
+
+export function sanitizeTimestamp(timestamp: string): string {
+  return timestamp.startsWith('0000-') ? timestamp.replace('0000-', '0001-') : timestamp;
 }

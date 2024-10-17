@@ -1,5 +1,4 @@
 import { HEALTH_CHECK_FILE, PDS_HEALTH_CHECK_CONCURRENCY, SQL_OUTPUT_FILE } from "../constants.js";
-import logger from "../logger.js";
 import fs from "node:fs/promises";
 import readline from "node:readline";
 import pLimit from "p-limit";

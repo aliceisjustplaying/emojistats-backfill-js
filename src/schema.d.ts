@@ -9,6 +9,8 @@ export type Generated<T> = T extends ColumnType<infer S, infer I, infer U>
   ? ColumnType<S, I | undefined, U>
   : ColumnType<T, T | undefined, T>;
 
+export type Int8 = ColumnType<string, bigint | number | string>;
+
 export type Timestamp = ColumnType<Date, Date | string>;
 
 export interface Emojis {
@@ -30,7 +32,18 @@ export interface Posts {
   text: string | null;
 }
 
+export interface Profiles {
+  cid: string;
+  created_at: Generated<Timestamp>;
+  description: string | null;
+  did: string;
+  display_name: string | null;
+  id: Generated<Int8>;
+  rkey: string;
+}
+
 export interface DB {
   emojis: Emojis;
   posts: Posts;
+  profiles: Profiles;
 }

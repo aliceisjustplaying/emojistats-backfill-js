@@ -57,3 +57,13 @@ export type BskyProfile = Record<
 >;
 
 export type BskyData = BskyPost | BskyProfile;
+
+export interface PostData {
+  cid: string;
+  did: string;
+  rkey: string;
+  hasEmojis: boolean;
+  langs: string[];
+  post: string;
+  createdAt: string;
+}
