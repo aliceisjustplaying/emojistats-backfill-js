@@ -36,7 +36,7 @@ export class PostgresBatchQueue {
       } else if (!this.batchTimer) {
         this.scheduleFlush();
       }
-      
+
       return false;
     });
 
