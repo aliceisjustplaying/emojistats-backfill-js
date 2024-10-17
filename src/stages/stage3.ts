@@ -5,7 +5,7 @@ import pLimit from 'p-limit';
 import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS } from '../constants.js';
 import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js';
 import { batchNormalizeEmojis } from '../emojiNormalization.js';
-import { sanitizeTimestamp } from '../helpers.js';
+import { sanitizeString, sanitizeTimestamp } from '../helpers.js';
 import { redis } from '../redis.js';
 import {
   BskyData,
@@ -89,11 +89,11 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const data: PostData = {
                         cid: postData.cid,
                         did: did,
-                        rkey: rkey,
+                        rkey: sanitizeString(rkey),
                         hasEmojis: hasEmojis,
                         langs: Array.from(langs),
                         emojis: normalizedEmojis,
-                        post: postData.text,
+                        post: sanitizeString(postData.text),
                         createdAt: sanitizedCreatedAt,
                       };
                       postBatchQueue.enqueue(data).catch((err: unknown) => {
@@ -128,9 +128,9 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const data: ProfileData = {
                         cid: profileData.cid,
                         did: did,
-                        rkey: rkey,
-                        displayName: profileData.displayName ?? '',
-                        description: profileData.description ?? '',
+                        rkey: sanitizeString(rkey),
+                        displayName: sanitizeString(profileData.displayName ?? ''),
+                        description: sanitizeString(profileData.description ?? ''),
                         createdAt: sanitizedCreatedAt,
                         hasDisplayNameEmojis: hasDisplayNameEmojis,
                         hasDescriptionEmojis: hasDescriptionEmojis,

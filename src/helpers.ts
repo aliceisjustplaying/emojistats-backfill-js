@@ -97,3 +97,7 @@ export function lowercaseObject<T>(input: T): T {
   // For other types (number, boolean, etc.), return as-is
   return input;
 }
+
+export function sanitizeString(input: string): string {
+  return input.replace(/\0/g, '');
+}
