@@ -1,8 +1,10 @@
 import axios from 'axios';
+import emojiRegexFunc from 'emoji-regex';
 import pLimit from 'p-limit';
 
 import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS } from '../constants.js';
 import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js';
+import { batchNormalizeEmojis } from '../emojiNormalization.js';
 import { sanitizeTimestamp } from '../helpers.js';
 import { redis } from '../redis.js';
 import {
@@ -12,9 +14,12 @@ import {
   BskyProfile,
   BskyProfileData,
   DidAndPds,
+  DidProcessingStatus,
   PostData,
   ProfileData,
 } from '../types.js';
+
+const emojiRegex: RegExp = emojiRegexFunc();
 
 export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> {
   const limit = pLimit(PDS_DATA_FETCH_CONCURRENCY);
@@ -22,18 +27,16 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
   let unsuccessfulRequests = 0;
   let successfulDids = 0;
   let failedDids = 0;
+  let retryDids = 0;
 
   const tasks = dids.map(({ did, pds }) =>
     limit(async () => {
-      const status = await redis.get(`${did}:status`);
-      if (status === 'completed' || status === 'failed') {
-        process.stdout.write('~');
-        return;
-      }
+      const status: DidProcessingStatus = (await redis.get(`${did}:status`)) as DidProcessingStatus;
 
-      // in theory this happens when we're resuming processing after a crash
-      if (status === 'processing') {
-        console.log(`Resuming processing for DID ${did}`);
+      if (status === 'completed' || status === 'failed') return;
+
+      if (status === 'retry' || status === 'processing') {
+        console.log(`Retrying DID set to ${status}: ${did}`);
       }
 
       await redis.set(`${did}:status`, 'processing');
@@ -44,7 +47,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
           { did, pds },
           {
             responseType: 'stream',
-            timeout: PYTHON_SERVICE_TIMEOUT_MS, // 30 minutes
+            timeout: PYTHON_SERVICE_TIMEOUT_MS,
           },
         );
 
@@ -71,17 +74,41 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
                       const sanitizedCreatedAt =
                         postData.createdAt ? sanitizeTimestamp(postData.createdAt) : '1970-01-01T00:00:00.000Z';
+
+                      let langs = new Set<string>();
+                      if (Array.isArray(postData.langs) && postData.langs.length > 0) {
+                        langs = new Set(postData.langs);
+                      } else {
+                        langs.add('unknown');
+                      }
+
+                      const emojiMatches = postData.text.match(emojiRegex) ?? [];
+                      const normalizedEmojis = batchNormalizeEmojis(emojiMatches);
+                      const hasEmojis = normalizedEmojis.length > 0;
+
                       const data: PostData = {
                         cid: postData.cid,
                         did: did,
                         rkey: rkey,
-                        hasEmojis: false,
-                        langs: postData.langs,
+                        hasEmojis: hasEmojis,
+                        langs: Array.from(langs),
+                        emojis: normalizedEmojis,
                         post: postData.text,
                         createdAt: sanitizedCreatedAt,
                       };
                       postBatchQueue.enqueue(data).catch((err: unknown) => {
-                        console.error(`Enqueue error for DID ${did}: ${(err as Error).message}`);
+                        console.error(`Post data enqueue error for DID ${did}: ${(err as Error).message}`);
+                        redis
+                          .set(`${did}:status`, 'retry')
+                          .then(() => {
+                            retryDids++;
+                            resolve();
+                          })
+                          .catch((err: unknown) => {
+                            console.log('AAAAAAAAAAAAAAAAAAAAAAAA');
+                            console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
+                            reject(err as Error);
+                          });
                       });
                     } else if (k.includes('app.bsky.actor.profile')) {
                       const profile = v as BskyProfile;
@@ -90,6 +117,14 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
                       const sanitizedCreatedAt =
                         profileData.createdAt ? sanitizeTimestamp(profileData.createdAt) : '1970-01-01T00:00:00.000Z';
+
+                      const displayNameEmojiMatches = profileData.displayName?.match(emojiRegex) ?? [];
+                      const descriptionEmojiMatches = profileData.description?.match(emojiRegex) ?? [];
+                      const normalizedDisplayNameEmojis = batchNormalizeEmojis(displayNameEmojiMatches);
+                      const normalizedDescriptionEmojis = batchNormalizeEmojis(descriptionEmojiMatches);
+                      const hasDisplayNameEmojis = normalizedDisplayNameEmojis.length > 0;
+                      const hasDescriptionEmojis = normalizedDescriptionEmojis.length > 0;
+
                       const data: ProfileData = {
                         cid: profileData.cid,
                         did: did,
@@ -97,10 +132,25 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                         displayName: profileData.displayName ?? '',
                         description: profileData.description ?? '',
                         createdAt: sanitizedCreatedAt,
+                        hasDisplayNameEmojis: hasDisplayNameEmojis,
+                        hasDescriptionEmojis: hasDescriptionEmojis,
+                        displayNameEmojis: normalizedDisplayNameEmojis,
+                        descriptionEmojis: normalizedDescriptionEmojis,
                       };
 
                       profileBatchQueue.enqueue(data).catch((err: unknown) => {
-                        console.error(`Enqueue error for DID ${did}: ${(err as Error).message}`);
+                        console.error(`Profile data enqueue error for DID ${did}: ${(err as Error).message}`);
+                        redis
+                          .set(`${did}:status`, 'retry')
+                          .then(() => {
+                            retryDids++;
+                            resolve();
+                          })
+                          .catch((err: unknown) => {
+                            console.log('AAAAAAAAAAAAAAAAAAAAAAAA');
+                            console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
+                            reject(err as Error);
+                          });
                       });
                     }
                   }
@@ -125,35 +175,54 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                 console.error(`JSON parse error at stream end for DID ${did}: ${(err as Error).message}`);
               }
             }
-            successfulDids++;
-            redis.set(`${did}:status`, 'completed').catch((err: unknown) => {
-              console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
-            });
-            if (successfulDids % 100 === 0) {
-              // process.stdout.write('#');
-              console.log(`Processed ${successfulDids} DIDs.`);
-            }
-            resolve();
+            redis
+              .get(`${did}:status`)
+              .then((status) => {
+                if (status === 'retry') {
+                  return;
+                }
+                redis
+                  .set(`${did}:status`, 'completed')
+                  .then(() => {
+                    successfulDids++;
+                    if (successfulDids % 100 === 0) {
+                      // process.stdout.write('#');
+                      console.log(`Processed ${successfulDids} DIDs.`);
+                    }
+                    resolve();
+                  })
+                  .catch((err: unknown) => {
+                    console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
+                  });
+              })
+              .catch((err: unknown) => {
+                console.error(`Redis get error for DID ${did}: ${(err as Error).message}`);
+              });
           });
 
           // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
           res.data.on('error', (err: Error) => {
             console.error(`Stream error for DID ${did}: ${err.message}`);
-            redis.set(`${did}:status`, 'failed').catch((err: unknown) => {
+
+            // I *think* retry is the reasonable thing to do here, since the request failed
+            // so something on the Python side is wrong. Maybe? lol.
+            redis.set(`${did}:status`, 'retry').catch((err: unknown) => {
               console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
             });
-            failedDids++;
-            if (failedDids % 100 === 0) {
-              // process.stdout.write('*');
-              console.log(`Failed ${failedDids} DIDs.`);
-            }
+            retryDids++;
             reject(err);
           });
         });
       } catch (error) {
+        // this happens when the user doesn't exist anymore, usually
         if (!(error as Error).message.includes('Request failed with status code 502')) {
           console.error(`Error with DID ${did}: ${(error as Error).message}`);
         }
+
+        redis.set(`${did}:status`, 'failed').catch((err: unknown) => {
+          console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
+        });
+
         unsuccessfulRequests++;
         failedDids++;
       }
@@ -163,5 +232,5 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
   await Promise.all(tasks);
   console.log(`Processed DIDs.`);
   console.log(`Successful requests: ${successfulRequests}, Unsuccessful requests: ${unsuccessfulRequests}`);
-  console.log(`Successful DIDs: ${successfulDids}, Failed DIDs: ${failedDids}`);
+  console.log(`Successful DIDs: ${successfulDids}, Failed DIDs: ${failedDids}, Retry DIDs: ${retryDids}`);
 }

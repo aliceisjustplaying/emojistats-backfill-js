@@ -1,5 +1,5 @@
 node_modules
 .env
 bun.lockb
-*.json
-*.jsonl
+dids_pds.jsonl
+pds_health.json

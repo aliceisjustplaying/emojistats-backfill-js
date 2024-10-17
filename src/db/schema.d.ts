@@ -11,13 +11,12 @@ export type Int8 = ColumnType<string, bigint | number | string>;
 
 export type Timestamp = ColumnType<Date, Date | string>;
 
-export interface Emojis {
+export interface PostEmojis {
   created_at: Generated<Timestamp>;
   emoji: string;
   id: Generated<Int8>;
   lang: string;
   post_id: Int8 | null;
-  profile_id: Int8 | null;
 }
 
 export interface Posts {
@@ -31,18 +30,36 @@ export interface Posts {
   text: string | null;
 }
 
+export interface ProfileDescriptionEmojis {
+  created_at: Generated<Timestamp>;
+  emoji: string;
+  id: Generated<Int8>;
+  profile_id: Int8 | null;
+}
+
+export interface ProfileDisplayNameEmojis {
+  created_at: Generated<Timestamp>;
+  emoji: string;
+  id: Generated<Int8>;
+  profile_id: Int8 | null;
+}
+
 export interface Profiles {
   cid: string;
   created_at: Generated<Timestamp>;
   description: string | null;
   did: string;
   display_name: string | null;
+  has_description_emojis: Generated<boolean>;
+  has_display_name_emojis: Generated<boolean>;
   id: Generated<Int8>;
   rkey: string;
 }
 
 export interface DB {
-  emojis: Emojis;
+  post_emojis: PostEmojis;
   posts: Posts;
+  profile_description_emojis: ProfileDescriptionEmojis;
+  profile_display_name_emojis: ProfileDisplayNameEmojis;
   profiles: Profiles;
 }

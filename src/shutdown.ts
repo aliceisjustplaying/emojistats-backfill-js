@@ -13,7 +13,6 @@ export async function gracefulShutdown(): Promise<void> {
     await closeDatabase();
     console.log('Database connections closed.');
     await redis.quit();
-    console.log('Redis client disconnected.');
     process.exit(0);
   } catch (err) {
     console.error(`Error during shutdown: ${(err as Error).message}`);

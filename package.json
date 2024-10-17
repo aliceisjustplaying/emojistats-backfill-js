@@ -23,6 +23,7 @@
     "big-json": "^3.2.0",
     "cli-progress": "^3.12.0",
     "dotenv": "^16.4.5",
+    "emoji-regex": "^10.4.0",
     "express": "^4.21.1",
     "husky": "^9.1.6",
     "ky": "^1.7.2",
