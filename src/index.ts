@@ -27,8 +27,6 @@ async function main() {
   await processDidsAndFetchData(didsToProcess);
 
   await gracefulShutdown();
-
-  // console.log(`Fetched data array length: ${fetchedData.length}`);
 }
 
 main().catch(async (error: unknown) => {

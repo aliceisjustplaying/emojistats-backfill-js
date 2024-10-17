@@ -22,6 +22,26 @@ export interface BskyPostData {
   cid: string;
 }
 
+export interface BskyProfileData {
+  $type: string;
+  avatar?: {
+    ref: { $link: string };
+    size: number;
+    $type: string;
+    mimeType: string;
+  };
+  banner?: {
+    ref: { $link: string };
+    size: number;
+    $type: string;
+    mimeType: string;
+  };
+  createdAt: string;
+  description?: string;
+  displayName?: string;
+  cid: string;
+}
+
 export type BskyPost = Record<
   string,
   {
@@ -34,30 +54,13 @@ export type BskyProfile = Record<
   string,
   {
     cid: string;
-    value: {
-      $type: string;
-      avatar?: {
-        ref: { $link: string };
-        size: number;
-        $type: string;
-        mimeType: string;
-      };
-      banner?: {
-        ref: { $link: string };
-        size: number;
-        $type: string;
-        mimeType: string;
-      };
-      createdAt: string;
-      description?: string;
-      displayName?: string;
-      cid: string;
-    };
+    value: BskyProfileData;
   }
 >;
 
 export type BskyData = BskyPost | BskyProfile;
 
+// TODO: redundant
 export interface PostData {
   cid: string;
   did: string;
@@ -65,5 +68,14 @@ export interface PostData {
   hasEmojis: boolean;
   langs: string[];
   post: string;
+  createdAt: string;
+}
+
+export interface ProfileData {
+  cid: string;
+  did: string;
+  rkey: string;
+  displayName: string;
+  description: string;
   createdAt: string;
 }

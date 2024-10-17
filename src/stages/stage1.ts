@@ -13,7 +13,6 @@ export async function fetchAndDumpDidsPdses() {
     console.log(`${SQL_OUTPUT_FILE} already exists. Skipping DID fetching.`);
     return;
   } catch {
-    console.log('fetchAndDumpDidsPdses');
     console.log('Fetching DIDs from database');
     const startTime = performance.now();
 
@@ -54,6 +53,10 @@ export async function fetchAndDumpDidsPdses() {
       const sanitizedPds = pds
         .replace(/^(https?:\/\/)/, '')
         .replace(/\/+$/, '')
+        .replace(/<\/?[^>]+(>|$)/g, '')
+        // eslint-disable-next-line no-control-regex
+        .replace(/[\x00-\x1F\x7F-\x9F]/g, '')
+        .replace(/[^a-zA-Z0-9-._~:/?#[\]!$&'()*+,;=]/g, '')
         .trim();
       const finalPds =
         sanitizedPds.includes('bsky.social') || sanitizedPds.includes('bsky.network') ? RELAY_URL : sanitizedPds;

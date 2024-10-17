@@ -1,10 +1,19 @@
 import axios from 'axios';
 import pLimit from 'p-limit';
 
-import { PDS_DATA_FETCH_CONCURRENCY } from '../constants.js';
+import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS } from '../constants.js';
+import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js';
 import { sanitizeTimestamp } from '../helpers.js';
-import { postgresBatchQueue } from '../postgresBatchQueue.js';
-import { BskyData, BskyPost, BskyPostData, DidAndPds, PostData } from '../types.js';
+import {
+  BskyData,
+  BskyPost,
+  BskyPostData,
+  BskyProfile,
+  BskyProfileData,
+  DidAndPds,
+  PostData,
+  ProfileData,
+} from '../types.js';
 
 export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> {
   const limit = pLimit(PDS_DATA_FETCH_CONCURRENCY);
@@ -21,7 +30,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
           { did, pds },
           {
             responseType: 'stream',
-            timeout: 30 * 60 * 1000, // 30 minutes
+            timeout: PYTHON_SERVICE_TIMEOUT_MS, // 30 minutes
           },
         );
 
@@ -46,7 +55,8 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const postData = post.value as unknown as BskyPostData;
                       const rkeyParts = k.split('/');
                       const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
-                      const sanitizedCreatedAt = sanitizeTimestamp(postData.createdAt);
+                      const sanitizedCreatedAt =
+                        postData.createdAt ? sanitizeTimestamp(postData.createdAt) : '1970-01-01T00:00:00.000Z';
                       const data: PostData = {
                         cid: postData.cid,
                         did: did,
@@ -56,7 +66,26 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                         post: postData.text,
                         createdAt: sanitizedCreatedAt,
                       };
-                      postgresBatchQueue.enqueue(data).catch((err: unknown) => {
+                      postBatchQueue.enqueue(data).catch((err: unknown) => {
+                        console.error(`Enqueue error for DID ${did}: ${(err as Error).message}`);
+                      });
+                    } else if (k.includes('app.bsky.actor.profile')) {
+                      const profile = v as BskyProfile;
+                      const profileData = profile.value as unknown as BskyProfileData;
+                      const rkeyParts = k.split('/');
+                      const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
+                      const sanitizedCreatedAt =
+                        profileData.createdAt ? sanitizeTimestamp(profileData.createdAt) : '1970-01-01T00:00:00.000Z';
+                      const data: ProfileData = {
+                        cid: profileData.cid,
+                        did: did,
+                        rkey: rkey,
+                        displayName: profileData.displayName ?? '',
+                        description: profileData.description ?? '',
+                        createdAt: sanitizedCreatedAt,
+                      };
+
+                      profileBatchQueue.enqueue(data).catch((err: unknown) => {
                         console.error(`Enqueue error for DID ${did}: ${(err as Error).message}`);
                       });
                     }
@@ -84,7 +113,8 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
             }
             successfulDids++;
             if (successfulDids % 100 === 0) {
-              process.stdout.write('#');
+              // process.stdout.write('#');
+              console.log(`Processed ${successfulDids} DIDs.`);
             }
             resolve();
           });
@@ -94,7 +124,8 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
             console.error(`Stream error for DID ${did}: ${err.message}`);
             failedDids++;
             if (failedDids % 100 === 0) {
-              process.stdout.write('*');
+              // process.stdout.write('*');
+              console.log(`Failed ${failedDids} DIDs.`);
             }
             reject(err);
           });

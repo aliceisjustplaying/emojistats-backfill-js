@@ -1,13 +1,13 @@
 // src/shutdown.ts
+import { closeDatabase } from './db/postgres.js';
+import { postBatchQueue, profileBatchQueue } from './db/postgresBatchQueues.js';
 import { stopMetricsServer } from './metrics.js';
-import { closeDatabase } from './postgres.js';
-import { postgresBatchQueue } from './postgresBatchQueue.js';
 
 export async function gracefulShutdown(): Promise<void> {
   console.log('Initiating graceful shutdown...');
   try {
     await stopMetricsServer();
-    await postgresBatchQueue.shutdown();
+    await Promise.all([postBatchQueue.shutdown(), profileBatchQueue.shutdown()]);
     console.log('All pending batches have been flushed.');
     await closeDatabase();
     console.log('Database connections closed.');

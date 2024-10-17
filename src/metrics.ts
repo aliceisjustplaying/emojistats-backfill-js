@@ -3,7 +3,7 @@ import express from 'express';
 import { Server } from 'http';
 import { Gauge, Registry, collectDefaultMetrics } from 'prom-client';
 
-import { pool } from './postgres.js';
+import { pool } from './db/postgres.js';
 
 const register = new Registry();
 collectDefaultMetrics({ register });
