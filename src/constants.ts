@@ -7,6 +7,7 @@ export const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6379';
 export const SQL_OUTPUT_FILE = 'dids_pds.jsonl';
 export const HEALTH_CHECK_FILE = 'pds_health.json';
 export const DATA_OUTPUT_FILE = 'bsky_data.jsonl';
+export const SUCCESSFUL_DIDS_LOG_INTERVAL = 1000;
 export const PDS_HEALTH_CHECK_CONCURRENCY = 50;
 export const PDS_HEALTH_CHECK_TIMEOUT_MS = 20000;
 export const PDS_DATA_FETCH_CONCURRENCY = 120;

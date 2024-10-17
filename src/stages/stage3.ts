@@ -2,7 +2,7 @@ import axios from 'axios';
 import emojiRegexFunc from 'emoji-regex';
 import pLimit from 'p-limit';
 
-import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS } from '../constants.js';
+import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS, SUCCESSFUL_DIDS_LOG_INTERVAL } from '../constants.js';
 import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js';
 import { batchNormalizeEmojis } from '../emojiNormalization.js';
 import { sanitizeString, sanitizeTimestamp } from '../helpers.js';
@@ -185,7 +185,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                   .set(`${did}:status`, 'completed')
                   .then(() => {
                     successfulDids++;
-                    if (successfulDids % 100 === 0) {
+                    if (successfulDids % SUCCESSFUL_DIDS_LOG_INTERVAL === 0) {
                       // process.stdout.write('#');
                       console.log(`Processed ${successfulDids} DIDs.`);
                     }
