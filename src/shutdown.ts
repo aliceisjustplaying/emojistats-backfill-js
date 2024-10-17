@@ -7,12 +7,12 @@ import { redis } from './redis.js';
 export async function gracefulShutdown(): Promise<void> {
   console.log('Initiating graceful shutdown...');
   try {
-    await stopMetricsServer();
     await Promise.all([postBatchQueue.shutdown(), profileBatchQueue.shutdown()]);
     console.log('All pending batches have been flushed.');
     await closeDatabase();
     console.log('Database connections closed.');
     await redis.quit();
+    await stopMetricsServer();
     process.exit(0);
   } catch (err) {
     console.error(`Error during shutdown: ${(err as Error).message}`);
