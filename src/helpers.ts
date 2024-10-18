@@ -46,13 +46,20 @@ export async function isPDSHealthy(pds: string) {
   }
 }
 
-export function sanitizeTimestamp(timestamp: string): string {
-  let sanitizedTimestamp = timestamp.startsWith('0000-') ? timestamp.replace('0000-', '0001-') : timestamp;
-  if (!(new Date(sanitizedTimestamp).getTime() > 0)) {
-    console.error(`Invalid timestamp: ${timestamp}`);
-    sanitizedTimestamp = '1970-01-01T00:00:00.000Z';
+export function sanitizeTimestamp(timestamp: string): { timestamp: string; isValid: boolean } {
+  const LOW_YEAR = -4711;
+  const HIGH_YEAR = 294275;
+  const sanitizedTimestamp = timestamp.startsWith('0000-') ? timestamp.replace('0000-', '0001-') : timestamp;
+
+  let isValid = false;
+  const date = new Date(sanitizedTimestamp);
+
+  if (!isNaN(date.getTime())) {
+    const year = date.getFullYear();
+    isValid = year >= LOW_YEAR && year <= HIGH_YEAR;
   }
-  return sanitizedTimestamp;
+
+  return { timestamp: sanitizedTimestamp, isValid: isValid };
 }
 
 export function emojiToCodePoint(emoji: string): string {
@@ -104,7 +111,7 @@ export function lowercaseObject<T>(input: T): T {
 }
 
 export function sanitizeString(input: string): string {
-  return input.replace(/\0/g, '');
+  return input.replace(/\0/g, '').trim();
 }
 
 export function chunkArray<T>(array: T[], chunkSize: number): T[][] {

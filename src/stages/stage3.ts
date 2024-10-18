@@ -72,8 +72,11 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const postData = post.value as unknown as BskyPostData;
                       const rkeyParts = k.split('/');
                       const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
-                      const sanitizedCreatedAt =
-                        postData.createdAt ? sanitizeTimestamp(postData.createdAt) : '1970-01-01T00:00:00.000Z';
+                      const { timestamp: sanitizedCreatedAt, isValid } = sanitizeTimestamp(postData.createdAt);
+                      if (!isValid) {
+                        console.log(`DID: ${did}`);
+                        console.error(`Invalid timestamp: ${postData.createdAt}`);
+                      }
 
                       let langs = new Set<string>();
                       if (Array.isArray(postData.langs) && postData.langs.length > 0) {
@@ -115,9 +118,11 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const profileData = profile.value as unknown as BskyProfileData;
                       const rkeyParts = k.split('/');
                       const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
-                      const sanitizedCreatedAt =
-                        profileData.createdAt ? sanitizeTimestamp(profileData.createdAt) : '1970-01-01T00:00:00.000Z';
-
+                      const { timestamp: sanitizedCreatedAt, isValid } = sanitizeTimestamp(profileData.createdAt);
+                      if (!isValid) {
+                        console.log(`DID: ${did}`);
+                        console.error(`Invalid timestamp: ${profileData.createdAt}`);
+                      }
                       const displayNameEmojiMatches = profileData.displayName?.match(emojiRegex) ?? [];
                       const descriptionEmojiMatches = profileData.description?.match(emojiRegex) ?? [];
                       const normalizedDisplayNameEmojis = batchNormalizeEmojis(displayNameEmojiMatches);
