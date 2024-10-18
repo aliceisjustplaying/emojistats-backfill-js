@@ -150,8 +150,15 @@ async function processProfile(key: string, value: unknown, did: string): Promise
 
 export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> {
   const limit = pLimit(PDS_DATA_FETCH_CONCURRENCY);
-  // eslint-disable-next-line @typescript-eslint/unbound-method
-  axiosRetry(axios, { retries: 10, retryDelay: axiosRetry.exponentialDelay });
+
+  axiosRetry(axios, {
+    retries: 10,
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    retryDelay: axiosRetry.exponentialDelay,
+    onRetry: (retryCount, error) => {
+      console.log(`Retry ${retryCount} because of error: ${error.message}`);
+    },
+  });
   const context: ProcessingContext = {
     successfulRequests: 0,
     unsuccessfulRequests: 0,
