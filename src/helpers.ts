@@ -47,7 +47,12 @@ export async function isPDSHealthy(pds: string) {
 }
 
 export function sanitizeTimestamp(timestamp: string): string {
-  return timestamp.startsWith('0000-') ? timestamp.replace('0000-', '0001-') : timestamp;
+  let sanitizedTimestamp = timestamp.startsWith('0000-') ? timestamp.replace('0000-', '0001-') : timestamp;
+  if (!(new Date(sanitizedTimestamp).getTime() > 0)) {
+    console.error(`Invalid timestamp: ${timestamp}`);
+    sanitizedTimestamp = '1970-01-01T00:00:00.000Z';
+  }
+  return sanitizedTimestamp;
 }
 
 export function emojiToCodePoint(emoji: string): string {
