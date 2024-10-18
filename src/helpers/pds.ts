@@ -17,7 +17,7 @@ export async function isPDSHealthy(pds: string) {
     const res = await ky.get(`https://${pds}/xrpc/com.atproto.server.describeServer`, {
       timeout: PDS_HEALTH_CHECK_TIMEOUT_MS,
       retry: {
-        limit: 3,
+        limit: 2,
         statusCodes: [429, 500, 502, 503, 504],
       },
     });
