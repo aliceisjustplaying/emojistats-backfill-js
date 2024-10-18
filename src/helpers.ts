@@ -46,7 +46,11 @@ export async function isPDSHealthy(pds: string) {
   }
 }
 
-export function sanitizeTimestamp(timestamp: string): { timestamp: string; isValid: boolean } {
+export function sanitizeTimestamp(timestamp: string | undefined | null): { timestamp: string; isValid: boolean } {
+  if (!timestamp) {
+    return { timestamp: '', isValid: false };
+  }
+
   const LOW_YEAR = -4711;
   const HIGH_YEAR = 294275;
   const sanitizedTimestamp = timestamp.startsWith('0000-') ? timestamp.replace('0000-', '0001-') : timestamp;
