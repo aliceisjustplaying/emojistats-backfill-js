@@ -123,7 +123,8 @@ export function lowercaseObject<T>(input: T): T {
 }
 
 export function sanitizeString(input: string): string {
-  return input.replace(/\0/g, '').trim();
+  // eslint-disable-next-line no-control-regex
+  return input.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '').trim();
 }
 
 export function chunkArray<T>(array: T[], chunkSize: number): T[][] {
