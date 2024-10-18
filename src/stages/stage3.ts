@@ -6,7 +6,7 @@ import pLimit from 'p-limit';
 import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS, SUCCESSFUL_DIDS_LOG_INTERVAL } from '../constants.js';
 import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js';
 import { batchNormalizeEmojis } from '../emojiNormalization.js';
-import { sanitizeString, sanitizeTimestamp } from '../helpers.js';
+import { chunkArray, sanitizeString, sanitizeTimestamp } from '../helpers.js';
 import { redis } from '../redis.js';
 import {
   BskyData,
@@ -272,7 +272,11 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
     }),
   );
 
-  await Promise.all(tasks);
+  const chunkedTasks = chunkArray(tasks, 10000);
+  for (const chunk of chunkedTasks) {
+    await Promise.all(chunk);
+    console.log(`Processed ${chunk.length} tasks.`);
+  }
   console.log(`Processed DIDs.`);
   console.log(`Successful requests: ${successfulRequests}, Unsuccessful requests: ${unsuccessfulRequests}`);
   console.log(`Successful DIDs: ${successfulDids}, Failed DIDs: ${failedDids}, Retry DIDs: ${retryDids}`);
