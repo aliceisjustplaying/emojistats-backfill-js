@@ -183,14 +183,12 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
           );
 
           context.successfulRequests++;
-          didsSuccessfulTotal.inc();
-          didsProcessedTotal.inc();
 
           // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           await processStream(res.data, did, context);
         } catch (error) {
           if (!(error as Error).message.includes('Request failed with status code 502')) {
-            console.error(`Error with DID ${did}: ${(error as Error).message}`);
+            console.error(`Error with DID ${did}: ${error as Error}`);
           }
 
           try {
@@ -273,7 +271,7 @@ async function processStream(stream: NodeJS.ReadableStream, did: string, context
     if (status !== 'retry') {
       await redis.set(`${did}:status`, 'completed');
       context.successfulDids++;
-      didsProcessedTotal.inc();
+      didsSuccessfulTotal.inc();
 
       if (context.successfulDids % SUCCESSFUL_DIDS_LOG_INTERVAL === 0) {
         console.log(`Processed ${context.successfulDids} DIDs.`);
@@ -289,6 +287,8 @@ async function processStream(stream: NodeJS.ReadableStream, did: string, context
     } catch (redisError: unknown) {
       console.error(`Redis set error for DID ${did}: ${(redisError as Error).message}`);
     }
+
+    didsProcessedTotal.inc();
 
     throw err;
   }
