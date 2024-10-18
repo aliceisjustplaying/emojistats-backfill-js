@@ -2,18 +2,23 @@ import { closeDatabase } from './db/postgres.js';
 import { postBatchQueue, profileBatchQueue } from './db/postgresBatchQueues.js';
 import { stopMetricsServer } from './metrics.js';
 import { redis } from './redis.js';
+import { shutdownStage3 } from './stages/stage3.js';
 
 export async function gracefulShutdown(): Promise<void> {
   console.log('Initiating graceful shutdown...');
   try {
-    await Promise.all([postBatchQueue.shutdown(), profileBatchQueue.shutdown()]);
+    await Promise.all([
+      postBatchQueue.shutdown(),
+      profileBatchQueue.shutdown(),
+      shutdownStage3(), // Ensure the weird timestamps stream is closed
+    ]);
     console.log('All pending batches have been flushed.');
     await closeDatabase();
     console.log('Database connections closed.');
     await redis.quit();
     await stopMetricsServer();
     process.exit(0);
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(`Error during shutdown: ${(err as Error).message}`);
     process.exit(1);
   }

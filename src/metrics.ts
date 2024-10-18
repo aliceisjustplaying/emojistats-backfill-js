@@ -51,6 +51,90 @@ export const didsConcurrentProcessing = new Gauge({
   registers: [register],
 });
 
+export const concurrentRedisInserts = new Gauge({
+  name: 'bluesky_concurrent_redis_inserts',
+  help: 'Number of concurrent Redis inserts',
+  registers: [register],
+});
+
+export const totalPostsWithEmojis = new Counter({
+  name: 'bluesky_total_posts_with_emojis',
+  help: 'Total number of posts with emojis',
+  registers: [register],
+});
+
+export const totalPostsWithoutEmojis = new Counter({
+  name: 'bluesky_total_posts_without_emojis',
+  help: 'Total number of posts without emojis',
+  registers: [register],
+});
+
+export const totalEmojis = new Counter({
+  name: 'bluesky_total_emojis',
+  help: 'Total number of emojis processed',
+  registers: [register],
+});
+
+export const totalProcessedPosts = new Counter({
+  name: 'bluesky_total_posts_processed_for_emojis',
+  help: 'Total number of posts processed for emojis',
+  registers: [register],
+});
+
+export const totalDisplayNamesProcessed = new Counter({
+  name: 'bluesky_total_display_names_processed_for_emojis',
+  help: 'Total number of display names processed for emojis',
+  registers: [register],
+});
+
+export const totalDescriptionNamesProcessed = new Counter({
+  name: 'bluesky_total_description_names_processed_for_emojis',
+  help: 'Total number of description names processed for emojis',
+  registers: [register],
+});
+
+export const totalDisplayNamesWithEmojis = new Counter({
+  name: 'bluesky_total_display_names_with_emojis',
+  help: 'Total number of display names with emojis',
+  registers: [register],
+});
+
+export const totalDescriptionNamesWithEmojis = new Counter({
+  name: 'bluesky_total_description_names_with_emojis',
+  help: 'Total number of description names with emojis',
+  registers: [register],
+});
+
+export const totalProcessedProfiles = new Counter({
+  name: 'bluesky_total_processed_profiles',
+  help: 'Total number of processed profiles',
+  registers: [register],
+});
+
+export const totalDisplayNamesWithoutEmojis = new Counter({
+  name: 'bluesky_total_display_names_without_emojis',
+  help: 'Total number of display names without emojis',
+  registers: [register],
+});
+
+export const totalDescriptionNamesWithoutEmojis = new Counter({
+  name: 'bluesky_total_description_names_without_emojis',
+  help: 'Total number of description names without emojis',
+  registers: [register],
+});
+
+export const totalDisplayNameEmojis = new Counter({
+  name: 'bluesky_total_display_name_emojis',
+  help: 'Total number of display name emojis',
+  registers: [register],
+});
+
+export const totalDescriptionNameEmojis = new Counter({
+  name: 'bluesky_total_description_name_emojis',
+  help: 'Total number of description name emojis',
+  registers: [register],
+});
+
 monitorPgPool(pool, register);
 
 const app = express();

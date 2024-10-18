@@ -1,5 +1,7 @@
+import { Mutex } from 'async-mutex';
 import axios from 'axios';
 import emojiRegexFunc from 'emoji-regex';
+import fs from 'fs';
 import pLimit from 'p-limit';
 
 import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS, SUCCESSFUL_DIDS_LOG_INTERVAL } from '../constants.js';
@@ -8,14 +10,36 @@ import { batchNormalizeEmojis } from '../emojiNormalization.js';
 import { chunkArray } from '../helpers/generic.js';
 import { sanitizeString, sanitizeTimestamp } from '../helpers/sanitize.js';
 import {
+  concurrentRedisInserts,
   didsConcurrentProcessing,
   didsFailedTotal,
   didsProcessedTotal,
   didsProcessingDuration,
   didsRetryTotal,
   didsSuccessfulTotal,
+  totalDescriptionNameEmojis,
+  totalDescriptionNamesWithEmojis,
+  totalDescriptionNamesWithoutEmojis,
+  totalDisplayNameEmojis,
+  totalDisplayNamesWithEmojis,
+  totalDisplayNamesWithoutEmojis,
+  totalEmojis,
+  totalPostsWithEmojis,
+  totalPostsWithoutEmojis,
+  totalProcessedPosts,
+  totalProcessedProfiles,
 } from '../metrics.js';
-import { redis } from '../redis.js';
+import {
+  DESCRIPTION_NAMES_WITHOUT_EMOJIS,
+  DESCRIPTION_SCRIPT,
+  DISPLAY_NAMES_WITHOUT_EMOJIS,
+  DISPLAY_NAME_SCRIPT,
+  POSTS_WITHOUT_EMOJIS,
+  POST_SCRIPT,
+  PROCESSED_POSTS,
+  PROCESSED_PROFILES,
+  redis,
+} from '../redis.js';
 import {
   BskyData,
   BskyPost,
@@ -30,12 +54,45 @@ import {
 
 const emojiRegex: RegExp = emojiRegexFunc();
 
+// Initialize mutex for writing to the weird timestamps file
+const writeMutex = new Mutex();
+
+// Define the path for the weird timestamps log file
+const weirdTimestampsFilePath = 'weird_timestamps.log';
+
+// Create a write stream for the weird timestamps file in append mode
+const weirdTimestampsStream = fs.createWriteStream(weirdTimestampsFilePath, { flags: 'a' });
+
 interface ProcessingContext {
   successfulDids: number;
   retryDids: number;
   successfulRequests: number;
   unsuccessfulRequests: number;
   failedDids: number;
+}
+
+// Function to log weird timestamps safely
+async function logWeirdTimestamp(details: {
+  did: string;
+  rkey: string;
+  cid: string;
+  originalCreatedAt: string;
+  sanitizedCreatedAt: string;
+  type: 'post' | 'profile';
+}): Promise<void> {
+  const logEntry = JSON.stringify(details) + '\n';
+  await writeMutex.runExclusive(() => {
+    return new Promise<void>((resolve, reject) => {
+      weirdTimestampsStream.write(logEntry, (err) => {
+        if (err) {
+          console.error(`Failed to write to weird timestamps file: ${err.message}`);
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  });
 }
 
 function processLanguages(langs?: string[]): Set<string> {
@@ -75,6 +132,16 @@ async function processPost(key: string, value: unknown, did: string): Promise<vo
       cid: ${postData.cid}
       original createdAt: ${postData.createdAt}
       sanitized createdAt: ${timestamp}`);
+
+    // Log the weird timestamp to the file
+    await logWeirdTimestamp({
+      did,
+      rkey: sanitizeString(rkey),
+      cid: postData.cid,
+      originalCreatedAt: postData.createdAt,
+      sanitizedCreatedAt: timestamp,
+      type: 'post',
+    });
   }
 
   const langs = processLanguages(postData.langs);
@@ -99,6 +166,25 @@ async function processPost(key: string, value: unknown, did: string): Promise<vo
     await redis.set(`${did}:status`, 'retry');
     throw err;
   }
+
+  /* step 2: redis */
+  concurrentRedisInserts.inc();
+  if (!hasEmojis) {
+    await redis.incr(POSTS_WITHOUT_EMOJIS);
+    totalPostsWithoutEmojis.inc();
+  } else {
+    await redis.evalSha(POST_SCRIPT, {
+      arguments: [JSON.stringify(normalizedEmojis), JSON.stringify(Array.from(langs))],
+    });
+
+    totalEmojis.inc(normalizedEmojis.length);
+    totalPostsWithEmojis.inc();
+  }
+
+  /* step 3: global metrics */
+  await redis.incr(PROCESSED_POSTS);
+  totalProcessedPosts.inc();
+  concurrentRedisInserts.dec();
 }
 
 async function processProfile(key: string, value: unknown, did: string): Promise<void> {
@@ -112,10 +198,20 @@ async function processProfile(key: string, value: unknown, did: string): Promise
   const { timestamp, wasWeird, defaulted } = sanitizeTimestamp(profileData.createdAt);
 
   if (wasWeird) {
-    console.error(`Weird profiletimestamp for DID: ${did}
+    console.error(`Weird profile timestamp for DID: ${did}
       rkey: ${rkey}
       cid: ${profileData.cid}
       createdAt: ${timestamp}`);
+
+    // Log the weird timestamp to the file
+    await logWeirdTimestamp({
+      did,
+      rkey: sanitizeString(rkey),
+      cid: profileData.cid,
+      originalCreatedAt: profileData.createdAt,
+      sanitizedCreatedAt: timestamp,
+      type: 'profile',
+    });
   }
 
   const { hasEmojis: hasDisplayNameEmojis, normalizedEmojis: normalizedDisplayNameEmojis } = extractEmojis(
@@ -145,6 +241,36 @@ async function processProfile(key: string, value: unknown, did: string): Promise
     await redis.set(`${did}:status`, 'retry');
     throw err;
   }
+
+  concurrentRedisInserts.inc();
+  if (!hasDisplayNameEmojis) {
+    await redis.incr(DISPLAY_NAMES_WITHOUT_EMOJIS);
+    totalDisplayNamesWithoutEmojis.inc();
+  } else {
+    await redis.evalSha(DISPLAY_NAME_SCRIPT, {
+      arguments: [JSON.stringify(normalizedDisplayNameEmojis)],
+    });
+
+    totalDisplayNameEmojis.inc(normalizedDisplayNameEmojis.length);
+    totalDisplayNamesWithEmojis.inc();
+  }
+
+  if (!hasDescriptionEmojis) {
+    await redis.incr(DESCRIPTION_NAMES_WITHOUT_EMOJIS);
+    totalDescriptionNamesWithoutEmojis.inc();
+  } else {
+    await redis.evalSha(DESCRIPTION_SCRIPT, {
+      arguments: [JSON.stringify(normalizedDescriptionEmojis)],
+    });
+
+    totalDescriptionNameEmojis.inc(normalizedDescriptionEmojis.length);
+    totalDescriptionNamesWithEmojis.inc();
+  }
+
+  /* step 3: global metrics */
+  await redis.incr(PROCESSED_PROFILES);
+  totalProcessedProfiles.inc();
+  concurrentRedisInserts.dec();
 }
 
 export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> {
@@ -215,7 +341,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
     try {
       await Promise.all(chunk);
       console.log(`Processed ${chunk.length} tasks.`);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error(`Error processing a chunk of tasks: ${(err as Error).message}`);
     }
   }
@@ -245,7 +371,7 @@ async function processStream(stream: NodeJS.ReadableStream, did: string, context
           try {
             const json = JSON.parse(line) as BskyData;
             await processLine(json, did);
-          } catch (err) {
+          } catch (err: unknown) {
             console.error(`JSON parse error for DID ${did}: ${(err as Error).message}`);
           }
         }
@@ -264,7 +390,7 @@ async function processStream(stream: NodeJS.ReadableStream, did: string, context
           console.log(did);
           throw new Error('JSON is not empty');
         }
-      } catch (err) {
+      } catch (err: unknown) {
         console.error(`JSON parse error at stream end for DID ${did}: ${(err as Error).message}`);
       }
     }
@@ -279,7 +405,7 @@ async function processStream(stream: NodeJS.ReadableStream, did: string, context
         console.log(`Processed ${context.successfulDids} DIDs.`);
       }
     }
-  } catch (err) {
+  } catch (err: unknown) {
     console.error(`Stream error for DID ${did}: ${(err as Error).message}`);
 
     try {
@@ -306,4 +432,25 @@ async function processLine(json: BskyData, did: string): Promise<void> {
   }
 
   await Promise.all(processingTasks);
+}
+
+// Export a shutdown function to close the weird timestamps write stream
+export async function shutdownStage3(): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    writeMutex
+      .runExclusive(() => {
+        return new Promise<void>((innerResolve, innerReject) => {
+          weirdTimestampsStream.end(() => {
+            console.log('Weird timestamps write stream closed.');
+            innerResolve();
+          });
+          weirdTimestampsStream.on('error', (err) => {
+            console.error(`Error closing weird timestamps write stream: ${err.message}`);
+            innerReject(err);
+          });
+        });
+      })
+      .then(resolve)
+      .catch(reject);
+  });
 }
