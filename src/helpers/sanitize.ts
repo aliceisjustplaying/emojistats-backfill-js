@@ -13,12 +13,16 @@ export function sanitizePDSName(pds: string): string {
   }
 }
 
-export function sanitizeTimestamp(timestamp: string | undefined | null): { timestamp: string; wasWeird: boolean } {
+export function sanitizeTimestamp(timestamp: string | undefined | null): {
+  timestamp: string;
+  wasWeird: boolean;
+  defaulted: boolean;
+} {
   const defaultTimestamp = '1970-01-01T00:00:00.000Z';
 
   // If there is no timestamp, return the default timestamp
   if (!timestamp) {
-    return { timestamp: defaultTimestamp, wasWeird: true };
+    return { timestamp: defaultTimestamp, wasWeird: false, defaulted: true };
   }
 
   // No such thing as year 0 in the Gregorian calendar
@@ -31,7 +35,7 @@ export function sanitizeTimestamp(timestamp: string | undefined | null): { times
 
   // If the timestamp is not a valid date, return the default timestamp
   if (isNaN(date.getTime())) {
-    return { timestamp: defaultTimestamp, wasWeird: true };
+    return { timestamp: defaultTimestamp, wasWeird: true, defaulted: true };
   }
 
   const LOW_YEAR = 1; // Since Bluesky uses Go, dates don't go back further than 1AD
@@ -44,15 +48,15 @@ export function sanitizeTimestamp(timestamp: string | undefined | null): { times
   if (year >= LOW_YEAR && year <= HIGH_YEAR) {
     if (year >= SANE_LOW_YEAR && year <= SANE_HIGH_YEAR) {
       // sane year, valid date
-      return { timestamp: date.toISOString(), wasWeird: false };
+      return { timestamp: date.toISOString(), wasWeird: false, defaulted: false };
     }
 
     // weird year, but valid date
-    return { timestamp: date.toISOString(), wasWeird: true };
+    return { timestamp: date.toISOString(), wasWeird: true, defaulted: false };
   }
 
   // invalid date in some way
-  return { timestamp: defaultTimestamp, wasWeird: true };
+  return { timestamp: defaultTimestamp, wasWeird: true, defaulted: true };
 }
 
 export function sanitizeString(input: string | undefined | null): string {
