@@ -38,10 +38,10 @@ export function sanitizeTimestamp(timestamp: string | undefined | null): {
     return { timestamp: defaultTimestamp, wasWeird: true, defaulted: true };
   }
 
-  const LOW_YEAR = 1; // Since Bluesky uses Go, dates don't go back further than 1AD
+  const LOW_YEAR = 1; // Since Bluesky uses Go, dates don't go back further than 0
   const HIGH_YEAR = 294275;
 
-  const SANE_LOW_YEAR = 2022;
+  const SANE_LOW_YEAR = 2006; // for twitter imports
   const SANE_HIGH_YEAR = 2025;
 
   const year = date.getFullYear();
