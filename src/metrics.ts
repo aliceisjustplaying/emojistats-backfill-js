@@ -8,14 +8,12 @@ import { pool } from './db/postgres.js';
 const register = new Registry();
 collectDefaultMetrics({ register });
 
-// Existing Gauge for concurrent Postgres inserts
 export const concurrentPostgresInserts = new Gauge({
   name: 'bluesky_concurrent_postgres_inserts',
   help: 'Number of concurrent Postgres inserts',
   registers: [register],
 });
 
-// New Counters for DID Processing
 export const didsProcessedTotal = new Counter({
   name: 'bluesky_dids_processed_total',
   help: 'Total number of DIDs processed',
@@ -40,22 +38,19 @@ export const didsRetryTotal = new Counter({
   registers: [register],
 });
 
-// Histogram for DID Processing Duration
 export const didsProcessingDuration = new Histogram({
   name: 'bluesky_dids_processing_duration_seconds',
   help: 'Duration of DID processing in seconds',
-  buckets: [0.1, 0.5, 1, 2, 5, 10], // Adjust buckets as needed
+  buckets: [0.1, 0.5, 1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 1800],
   registers: [register],
 });
 
-// Gauge for Concurrent DID Processing
 export const didsConcurrentProcessing = new Gauge({
   name: 'bluesky_dids_concurrent_processing',
   help: 'Number of DIDs currently being processed',
   registers: [register],
 });
 
-// Monitor Postgres Pool Metrics
 monitorPgPool(pool, register);
 
 const app = express();
