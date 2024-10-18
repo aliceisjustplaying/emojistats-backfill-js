@@ -1,5 +1,5 @@
 import { EMOJI_BATCH_SIZE } from '../constants.js';
-import { chunkArray } from '../helpers.js';
+import { chunkArray } from '../helpers/generic.js';
 import type { PostData, ProfileData } from '../types.js';
 import { db } from './postgres.js';
 

@@ -3,7 +3,8 @@ import readline from 'node:readline';
 import pLimit from 'p-limit';
 
 import { HEALTH_CHECK_FILE, PDS_HEALTH_CHECK_CONCURRENCY, SQL_OUTPUT_FILE } from '../constants.js';
-import { isPDSHealthy, sanitizePDSName } from '../helpers.js';
+import { isPDSHealthy } from '../helpers/pds.js';
+import { sanitizePDSName } from '../helpers/sanitize.js';
 import { PdsHealthStatus, PdsToDidsMap } from '../types.js';
 
 export async function checkAllPDSHealth() {

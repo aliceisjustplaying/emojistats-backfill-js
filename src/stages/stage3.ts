@@ -5,7 +5,8 @@ import pLimit from 'p-limit';
 import { PDS_DATA_FETCH_CONCURRENCY, PYTHON_SERVICE_TIMEOUT_MS, SUCCESSFUL_DIDS_LOG_INTERVAL } from '../constants.js';
 import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js';
 import { batchNormalizeEmojis } from '../emojiNormalization.js';
-import { chunkArray, sanitizeString, sanitizeTimestamp } from '../helpers.js';
+import { chunkArray } from '../helpers/generic.js';
+import { sanitizeString, sanitizeTimestamp } from '../helpers/sanitize.js';
 import { redis } from '../redis.js';
 import {
   BskyData,
