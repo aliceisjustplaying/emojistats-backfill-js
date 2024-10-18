@@ -7,6 +7,15 @@ import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js'
 import { batchNormalizeEmojis } from '../emojiNormalization.js';
 import { chunkArray } from '../helpers/generic.js';
 import { sanitizeString, sanitizeTimestamp } from '../helpers/sanitize.js';
+// Import Prometheus metrics
+import {
+  didsConcurrentProcessing,
+  didsFailedTotal,
+  didsProcessedTotal,
+  didsProcessingDuration,
+  didsRetryTotal,
+  didsSuccessfulTotal,
+} from '../metrics.js';
 import { redis } from '../redis.js';
 import {
   BskyData,
@@ -22,7 +31,15 @@ import {
 
 const emojiRegex: RegExp = emojiRegexFunc();
 
-export function processLanguages(langs?: string[]): Set<string> {
+interface ProcessingContext {
+  successfulDids: number;
+  retryDids: number;
+  successfulRequests: number;
+  unsuccessfulRequests: number;
+  failedDids: number;
+}
+
+function processLanguages(langs?: string[]): Set<string> {
   const languageSet = new Set<string>();
   if (Array.isArray(langs) && langs.length > 0) {
     return new Set(langs);
@@ -31,7 +48,7 @@ export function processLanguages(langs?: string[]): Set<string> {
   return languageSet;
 }
 
-export function extractEmojis(text: string | undefined | null): { hasEmojis: boolean; normalizedEmojis: string[] } {
+function extractEmojis(text: string | undefined | null): { hasEmojis: boolean; normalizedEmojis: string[] } {
   let hasEmojis = false;
   let emojiMatches: RegExpMatchArray | [] | undefined = [];
   let normalizedEmojis: string[] = [];
@@ -39,227 +56,252 @@ export function extractEmojis(text: string | undefined | null): { hasEmojis: boo
     emojiMatches = text.match(emojiRegex) ?? [];
     normalizedEmojis = batchNormalizeEmojis(emojiMatches);
     hasEmojis = normalizedEmojis.length > 0;
-  } else {
-    hasEmojis = false;
   }
   return { hasEmojis, normalizedEmojis };
 }
 
+async function processPost(key: string, value: unknown, did: string): Promise<void> {
+  const post = value as BskyPost;
+  const postData = post.value as unknown as BskyPostData;
+  const rkey = sanitizeString(key.split('/').pop());
+  const { timestamp, wasWeird } = sanitizeTimestamp(postData.createdAt);
+
+  if (wasWeird) {
+    console.error(`Weird timestamp for DID: ${did}
+      rkey: ${rkey}
+      cid: ${postData.cid}
+      createdAt: ${timestamp}`);
+  }
+
+  const langs = processLanguages(postData.langs);
+  const text = sanitizeString(postData.text);
+  const { hasEmojis, normalizedEmojis } = extractEmojis(text);
+
+  const data: PostData = {
+    cid: postData.cid,
+    did,
+    rkey: sanitizeString(rkey),
+    hasEmojis,
+    langs: Array.from(langs),
+    emojis: normalizedEmojis,
+    post: text,
+    createdAt: timestamp,
+  };
+
+  try {
+    await postBatchQueue.enqueue(data);
+  } catch (err: unknown) {
+    console.error(`Post data enqueue error for DID ${did}: ${(err as Error).message}`);
+    await redis.set(`${did}:status`, 'retry');
+    throw err;
+  }
+}
+
+async function processProfile(key: string, value: unknown, did: string): Promise<void> {
+  const profile = value as BskyProfile;
+  const profileData = profile.value as unknown as BskyProfileData;
+  const rkey = sanitizeString(key.split('/').pop());
+  const { timestamp, wasWeird } = sanitizeTimestamp(profileData.createdAt);
+
+  if (wasWeird) {
+    console.error(`Weird timestamp for DID: ${did}
+      rkey: ${rkey}
+      cid: ${profileData.cid}
+      createdAt: ${timestamp}`);
+  }
+
+  const { hasEmojis: hasDisplayNameEmojis, normalizedEmojis: normalizedDisplayNameEmojis } = extractEmojis(
+    profileData.displayName,
+  );
+  const { hasEmojis: hasDescriptionEmojis, normalizedEmojis: normalizedDescriptionEmojis } = extractEmojis(
+    profileData.description,
+  );
+
+  const data: ProfileData = {
+    cid: profileData.cid,
+    did,
+    rkey,
+    displayName: sanitizeString(profileData.displayName),
+    description: sanitizeString(profileData.description),
+    createdAt: timestamp,
+    hasDisplayNameEmojis,
+    hasDescriptionEmojis,
+    displayNameEmojis: normalizedDisplayNameEmojis,
+    descriptionEmojis: normalizedDescriptionEmojis,
+  };
+
+  try {
+    await profileBatchQueue.enqueue(data);
+  } catch (err: unknown) {
+    console.error(`Profile data enqueue error for DID ${did}: ${(err as Error).message}`);
+    await redis.set(`${did}:status`, 'retry');
+    throw err;
+  }
+}
+
 export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> {
   const limit = pLimit(PDS_DATA_FETCH_CONCURRENCY);
-  let successfulRequests = 0;
-  let unsuccessfulRequests = 0;
-  let successfulDids = 0;
-  let failedDids = 0;
-  let retryDids = 0;
+  const context: ProcessingContext = {
+    successfulRequests: 0,
+    unsuccessfulRequests: 0,
+    successfulDids: 0,
+    failedDids: 0,
+    retryDids: 0,
+  };
 
   const tasks = dids.map(({ did, pds }) =>
     limit(async () => {
-      const status: DidProcessingStatus = (await redis.get(`${did}:status`)) as DidProcessingStatus;
+      // Increment concurrent processing gauge
+      didsConcurrentProcessing.inc();
 
-      if (status === 'completed' || status === 'failed') return;
-
-      if (status === 'retry' || status === 'processing') {
-        console.log(`Retrying DID set to ${status}: ${did}`);
-      }
-
-      await redis.set(`${did}:status`, 'processing');
+      // Start timer for processing duration
+      const endTimer = didsProcessingDuration.startTimer();
 
       try {
-        const res = await axios.post(
-          'http://localhost:8000/fetch',
-          { did, pds },
-          {
-            responseType: 'stream',
-            timeout: PYTHON_SERVICE_TIMEOUT_MS,
-          },
-        );
+        const status: DidProcessingStatus = (await redis.get(`${did}:status`)) as DidProcessingStatus;
 
-        successfulRequests++;
+        if (status === 'completed' || status === 'failed') return;
 
-        await new Promise<void>((resolve, reject) => {
-          let buffer = '';
-
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-          res.data.on('data', (chunk: Buffer) => {
-            buffer += chunk.toString();
-            let boundary = buffer.indexOf('\n');
-            while (boundary !== -1) {
-              const line = buffer.substring(0, boundary);
-              buffer = buffer.substring(boundary + 1);
-              if (line.trim()) {
-                try {
-                  const json = JSON.parse(line) as BskyData;
-                  for (const [k, v] of Object.entries(json)) {
-                    if (k.includes('app.bsky.feed.post')) {
-                      const post = v as BskyPost;
-                      const postData = post.value as unknown as BskyPostData;
-                      const rkey = sanitizeString(k.split('/').pop()); // the format is app.bsky.feed.post/rkey
-                      const { timestamp, wasWeird } = sanitizeTimestamp(postData.createdAt);
-
-                      if (wasWeird) {
-                        console.error(`Weird timestamp for DID: ${did}
-                          rkey: ${rkey}
-                          cid: ${postData.cid}
-                          createdAt: ${timestamp}`);
-                      }
-
-                      const langs = processLanguages(postData.langs);
-                      const text = sanitizeString(postData.text);
-                      const { hasEmojis, normalizedEmojis } = extractEmojis(text);
-
-                      const data: PostData = {
-                        cid: postData.cid,
-                        did: did,
-                        rkey: sanitizeString(rkey),
-                        hasEmojis: hasEmojis,
-                        langs: Array.from(langs),
-                        emojis: normalizedEmojis,
-                        post: text,
-                        createdAt: timestamp,
-                      };
-                      postBatchQueue.enqueue(data).catch((err: unknown) => {
-                        console.error(`Post data enqueue error for DID ${did}: ${(err as Error).message}`);
-                        redis
-                          .set(`${did}:status`, 'retry')
-                          .then(() => {
-                            retryDids++;
-                            resolve();
-                          })
-                          .catch((err: unknown) => {
-                            console.log('AAAAAAAAAAAAAAAAAAAAAAAA');
-                            console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
-                            reject(err as Error);
-                          });
-                      });
-                    } else if (k.includes('app.bsky.actor.profile')) {
-                      const profile = v as BskyProfile;
-                      const profileData = profile.value as unknown as BskyProfileData;
-                      const rkey = sanitizeString(k.split('/').pop()); // the format is app.bsky.actor.profile/rkey
-                      const { timestamp, wasWeird } = sanitizeTimestamp(profileData.createdAt);
-
-                      if (wasWeird) {
-                        console.error(`Weird timestamp for DID: ${did}
-                          rkey: ${rkey}
-                          cid: ${profileData.cid}
-                          createdAt: ${timestamp}`);
-                      }
-
-                      const { hasEmojis: hasDisplayNameEmojis, normalizedEmojis: normalizedDisplayNameEmojis } =
-                        extractEmojis(profileData.displayName);
-                      const { hasEmojis: hasDescriptionEmojis, normalizedEmojis: normalizedDescriptionEmojis } =
-                        extractEmojis(profileData.description);
-
-                      const data: ProfileData = {
-                        cid: profileData.cid,
-                        did: did,
-                        rkey: rkey,
-                        displayName: sanitizeString(profileData.displayName),
-                        description: sanitizeString(profileData.description),
-                        createdAt: timestamp,
-                        hasDisplayNameEmojis: hasDisplayNameEmojis,
-                        hasDescriptionEmojis: hasDescriptionEmojis,
-                        displayNameEmojis: normalizedDisplayNameEmojis,
-                        descriptionEmojis: normalizedDescriptionEmojis,
-                      };
-
-                      profileBatchQueue.enqueue(data).catch((err: unknown) => {
-                        console.error(`Profile data enqueue error for DID ${did}: ${(err as Error).message}`);
-                        redis
-                          .set(`${did}:status`, 'retry')
-                          .then(() => {
-                            retryDids++;
-                            resolve();
-                          })
-                          .catch((err: unknown) => {
-                            console.log('AAAAAAAAAAAAAAAAAAAAAAAA');
-                            console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
-                            reject(err as Error);
-                          });
-                      });
-                    }
-                  }
-                } catch (err) {
-                  console.error(`JSON parse error for DID ${did}: ${(err as Error).message}`);
-                }
-              }
-              boundary = buffer.indexOf('\n');
-            }
-          });
-
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-          res.data.on('end', () => {
-            if (buffer.trim()) {
-              try {
-                const json = JSON.parse(buffer) as BskyData;
-                console.dir(json, { depth: null });
-                if (Object.keys(json).length > 0) {
-                  throw new Error('JSON is not empty');
-                }
-              } catch (err) {
-                console.error(`JSON parse error at stream end for DID ${did}: ${(err as Error).message}`);
-              }
-            }
-            redis
-              .get(`${did}:status`)
-              .then((status) => {
-                if (status === 'retry') {
-                  return;
-                }
-                redis
-                  .set(`${did}:status`, 'completed')
-                  .then(() => {
-                    successfulDids++;
-                    if (successfulDids % SUCCESSFUL_DIDS_LOG_INTERVAL === 0) {
-                      // process.stdout.write('#');
-                      console.log(`Processed ${successfulDids} DIDs.`);
-                    }
-                    resolve();
-                  })
-                  .catch((err: unknown) => {
-                    console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
-                  });
-              })
-              .catch((err: unknown) => {
-                console.error(`Redis get error for DID ${did}: ${(err as Error).message}`);
-              });
-          });
-
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
-          res.data.on('error', (err: Error) => {
-            console.error(`Stream error for DID ${did}: ${err.message}`);
-
-            // I *think* retry is the reasonable thing to do here, since the request failed
-            // so something on the Python side is wrong. Maybe? lol.
-            redis.set(`${did}:status`, 'retry').catch((err: unknown) => {
-              console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
-            });
-            retryDids++;
-            reject(err);
-          });
-        });
-      } catch (error) {
-        // this happens when the user doesn't exist anymore, usually
-        if (!(error as Error).message.includes('Request failed with status code 502')) {
-          console.error(`Error with DID ${did}: ${(error as Error).message}`);
+        if (status === 'retry' || status === 'processing') {
+          console.log(`Retrying DID set to ${status}: ${did}`);
         }
 
-        redis.set(`${did}:status`, 'failed').catch((err: unknown) => {
-          console.error(`Redis set error for DID ${did}: ${(err as Error).message}`);
-        });
+        await redis.set(`${did}:status`, 'processing');
 
-        unsuccessfulRequests++;
-        failedDids++;
+        try {
+          const res = await axios.post(
+            'http://localhost:8000/fetch',
+            { did, pds },
+            {
+              responseType: 'stream',
+              timeout: PYTHON_SERVICE_TIMEOUT_MS,
+            },
+          );
+
+          context.successfulRequests++;
+          didsSuccessfulTotal.inc();
+          didsProcessedTotal.inc();
+
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+          await processStream(res.data, did, context);
+        } catch (error) {
+          if (!(error as Error).message.includes('Request failed with status code 502')) {
+            console.error(`Error with DID ${did}: ${(error as Error).message}`);
+          }
+
+          try {
+            await redis.set(`${did}:status`, 'failed');
+          } catch (redisError: unknown) {
+            console.error(`Redis set error for DID ${did}: ${(redisError as Error).message}`);
+          }
+
+          context.unsuccessfulRequests++;
+          context.failedDids++;
+          didsFailedTotal.inc();
+        }
+      } finally {
+        // Observe the processing duration
+        endTimer();
+
+        // Decrement concurrent processing gauge
+        didsConcurrentProcessing.dec();
       }
     }),
   );
 
   const chunkedTasks = chunkArray(tasks, 10000);
   for (const chunk of chunkedTasks) {
-    await Promise.all(chunk);
-    console.log(`Processed ${chunk.length} tasks.`);
+    try {
+      await Promise.all(chunk);
+      console.log(`Processed ${chunk.length} tasks.`);
+    } catch (err) {
+      console.error(`Error processing a chunk of tasks: ${(err as Error).message}`);
+    }
   }
+
   console.log(`Processed DIDs.`);
-  console.log(`Successful requests: ${successfulRequests}, Unsuccessful requests: ${unsuccessfulRequests}`);
-  console.log(`Successful DIDs: ${successfulDids}, Failed DIDs: ${failedDids}, Retry DIDs: ${retryDids}`);
+  console.log(
+    `Successful requests: ${context.successfulRequests}, Unsuccessful requests: ${context.unsuccessfulRequests}`,
+  );
+  console.log(
+    `Successful DIDs: ${context.successfulDids}, Failed DIDs: ${context.failedDids}, Retry DIDs: ${context.retryDids}`,
+  );
+}
+
+async function processStream(stream: NodeJS.ReadableStream, did: string, context: ProcessingContext): Promise<void> {
+  let buffer = '';
+
+  try {
+    for await (const chunk of stream) {
+      buffer += chunk.toString();
+      let boundary = buffer.indexOf('\n');
+
+      while (boundary !== -1) {
+        const line = buffer.substring(0, boundary);
+        buffer = buffer.substring(boundary + 1);
+
+        if (line.trim()) {
+          try {
+            const json = JSON.parse(line) as BskyData;
+            await processLine(json, did);
+          } catch (err) {
+            console.error(`JSON parse error for DID ${did}: ${(err as Error).message}`);
+          }
+        }
+
+        boundary = buffer.indexOf('\n');
+      }
+    }
+
+    if (buffer.trim()) {
+      try {
+        // we should never get here
+        const json = JSON.parse(buffer) as BskyData;
+        console.dir(json, { depth: null });
+        if (Object.keys(json).length > 0) {
+          // throw new Error('JSON is not empty');
+          process.exit(1);
+        }
+      } catch (err) {
+        console.error(`JSON parse error at stream end for DID ${did}: ${(err as Error).message}`);
+      }
+    }
+
+    const status: DidProcessingStatus = (await redis.get(`${did}:status`)) as DidProcessingStatus;
+    if (status !== 'retry') {
+      await redis.set(`${did}:status`, 'completed');
+      context.successfulDids++;
+      didsProcessedTotal.inc();
+
+      if (context.successfulDids % SUCCESSFUL_DIDS_LOG_INTERVAL === 0) {
+        console.log(`Processed ${context.successfulDids} DIDs.`);
+      }
+    }
+  } catch (err) {
+    console.error(`Stream error for DID ${did}: ${(err as Error).message}`);
+
+    try {
+      await redis.set(`${did}:status`, 'retry');
+      context.retryDids++;
+      didsRetryTotal.inc();
+    } catch (redisError: unknown) {
+      console.error(`Redis set error for DID ${did}: ${(redisError as Error).message}`);
+    }
+
+    throw err;
+  }
+}
+
+async function processLine(json: BskyData, did: string): Promise<void> {
+  const processingTasks: Promise<void>[] = [];
+
+  for (const [key, value] of Object.entries(json)) {
+    if (key.includes('app.bsky.feed.post')) {
+      processingTasks.push(processPost(key, value, did));
+    } else if (key.includes('app.bsky.actor.profile')) {
+      processingTasks.push(processProfile(key, value, did));
+    }
+  }
+
+  await Promise.all(processingTasks);
 }

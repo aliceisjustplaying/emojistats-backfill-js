@@ -1,19 +1,61 @@
 import { monitorPgPool } from '@christiangalsterer/node-postgres-prometheus-exporter';
 import express from 'express';
 import { Server } from 'http';
-import { Gauge, Registry, collectDefaultMetrics } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
 
 import { pool } from './db/postgres.js';
 
 const register = new Registry();
 collectDefaultMetrics({ register });
 
+// Existing Gauge for concurrent Postgres inserts
 export const concurrentPostgresInserts = new Gauge({
   name: 'bluesky_concurrent_postgres_inserts',
   help: 'Number of concurrent Postgres inserts',
   registers: [register],
 });
 
+// New Counters for DID Processing
+export const didsProcessedTotal = new Counter({
+  name: 'bluesky_dids_processed_total',
+  help: 'Total number of DIDs processed',
+  registers: [register],
+});
+
+export const didsSuccessfulTotal = new Counter({
+  name: 'bluesky_dids_successful_total',
+  help: 'Total number of successfully processed DIDs',
+  registers: [register],
+});
+
+export const didsFailedTotal = new Counter({
+  name: 'bluesky_dids_failed_total',
+  help: 'Total number of failed DIDs',
+  registers: [register],
+});
+
+export const didsRetryTotal = new Counter({
+  name: 'bluesky_dids_retry_total',
+  help: 'Total number of DIDs retried',
+  registers: [register],
+});
+
+// Histogram for DID Processing Duration
+export const didsProcessingDuration = new Histogram({
+  name: 'bluesky_dids_processing_duration_seconds',
+  help: 'Duration of DID processing in seconds',
+  buckets: [0.1, 0.5, 1, 2, 5, 10], // Adjust buckets as needed
+  registers: [register],
+});
+
+// Gauge for Concurrent DID Processing
+export const didsConcurrentProcessing = new Gauge({
+  name: 'bluesky_dids_concurrent_processing',
+  help: 'Number of DIDs currently being processed',
+  registers: [register],
+});
+
+// Monitor Postgres Pool Metrics
 monitorPgPool(pool, register);
 
 const app = express();
