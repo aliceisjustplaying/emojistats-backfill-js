@@ -1,4 +1,6 @@
-import { PostData, ProfileData } from '../types.js';
+import { EMOJI_BATCH_SIZE } from '../constants.js';
+import { chunkArray } from '../helpers.js';
+import type { PostData, ProfileData } from '../types.js';
 import { db } from './postgres.js';
 
 export const insertPosts = async (batch: PostData[]): Promise<void> => {
@@ -48,7 +50,10 @@ export const insertPosts = async (batch: PostData[]): Promise<void> => {
     });
 
     if (emojiInserts.length > 0) {
-      await tx.insertInto('post_emojis').values(emojiInserts).execute();
+      const emojiChunks = chunkArray(emojiInserts, EMOJI_BATCH_SIZE);
+      for (const chunk of emojiChunks) {
+        await tx.insertInto('post_emojis').values(chunk).execute();
+      }
     }
   });
 };
@@ -113,11 +118,17 @@ export const insertProfiles = async (batch: ProfileData[]): Promise<void> => {
     });
 
     if (displayNameEmojiInserts.length > 0) {
-      await tx.insertInto('profile_display_name_emojis').values(displayNameEmojiInserts).execute();
+      const displayNameEmojiChunks = chunkArray(displayNameEmojiInserts, EMOJI_BATCH_SIZE);
+      for (const chunk of displayNameEmojiChunks) {
+        await tx.insertInto('profile_display_name_emojis').values(chunk).execute();
+      }
     }
 
     if (descriptionEmojiInserts.length > 0) {
-      await tx.insertInto('profile_description_emojis').values(descriptionEmojiInserts).execute();
+      const descriptionEmojiChunks = chunkArray(descriptionEmojiInserts, EMOJI_BATCH_SIZE);
+      for (const chunk of descriptionEmojiChunks) {
+        await tx.insertInto('profile_description_emojis').values(chunk).execute();
+      }
     }
   });
 };

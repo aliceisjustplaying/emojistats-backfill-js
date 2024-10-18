@@ -14,5 +14,6 @@ export const PDS_DATA_FETCH_CONCURRENCY = 120;
 export const DIDS_TO_PROCESS = parseInt(process.argv[2], 10) || 10000;
 export const PYTHON_SERVICE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes
 export const BATCH_SIZE = 5000; // Number of postgres records per batch
+export const EMOJI_BATCH_SIZE = 1000; // Number of emoji records per batch
 export const BATCH_TIMEOUT_MS = 5000; // how long to wait for a batch to fill before flushing
 export const MAX_FLUSH_RETRIES = 5; // Maximum number of retry attempts for flushing
