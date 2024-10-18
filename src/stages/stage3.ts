@@ -63,7 +63,11 @@ function extractEmojis(text: string | undefined | null): { hasEmojis: boolean; n
 async function processPost(key: string, value: unknown, did: string): Promise<void> {
   const post = value as BskyPost;
   const postData = post.value as unknown as BskyPostData;
-  const rkey = sanitizeString(key.split('/').pop());
+  let rkey = sanitizeString(key.split('/').pop());
+  // This is probably too paranoid but you never know with Bluesky
+  if (rkey === '') {
+    rkey = Math.random().toString(36).substring(2, 15);
+  }
   const { timestamp, wasWeird } = sanitizeTimestamp(postData.createdAt);
 
   if (wasWeird) {
@@ -100,7 +104,11 @@ async function processPost(key: string, value: unknown, did: string): Promise<vo
 async function processProfile(key: string, value: unknown, did: string): Promise<void> {
   const profile = value as BskyProfile;
   const profileData = profile.value as unknown as BskyProfileData;
-  const rkey = sanitizeString(key.split('/').pop());
+  let rkey = sanitizeString(key.split('/').pop());
+  // This is probably too paranoid but you never know with Bluesky
+  if (rkey === '') {
+    rkey = Math.random().toString(36).substring(2, 15);
+  }
   const { timestamp, wasWeird } = sanitizeTimestamp(profileData.createdAt);
 
   if (wasWeird) {
@@ -259,8 +267,9 @@ async function processStream(stream: NodeJS.ReadableStream, did: string, context
         const json = JSON.parse(buffer) as BskyData;
         console.dir(json, { depth: null });
         if (Object.keys(json).length > 0) {
-          // throw new Error('JSON is not empty');
-          process.exit(1);
+          console.error('JSON is not empty', json);
+          console.log(did);
+          throw new Error('JSON is not empty');
         }
       } catch (err) {
         console.error(`JSON parse error at stream end for DID ${did}: ${(err as Error).message}`);
