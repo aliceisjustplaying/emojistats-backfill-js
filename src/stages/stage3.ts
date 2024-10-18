@@ -7,7 +7,6 @@ import { postBatchQueue, profileBatchQueue } from '../db/postgresBatchQueues.js'
 import { batchNormalizeEmojis } from '../emojiNormalization.js';
 import { chunkArray } from '../helpers/generic.js';
 import { sanitizeString, sanitizeTimestamp } from '../helpers/sanitize.js';
-// Import Prometheus metrics
 import {
   didsConcurrentProcessing,
   didsFailedTotal,
@@ -159,12 +158,8 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
 
   const tasks = dids.map(({ did, pds }) =>
     limit(async () => {
-      // Increment concurrent processing gauge
       didsConcurrentProcessing.inc();
-
-      // Start timer for processing duration
       const endTimer = didsProcessingDuration.startTimer();
-
       try {
         const status: DidProcessingStatus = (await redis.get(`${did}:status`)) as DidProcessingStatus;
 
@@ -208,10 +203,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
           didsFailedTotal.inc();
         }
       } finally {
-        // Observe the processing duration
         endTimer();
-
-        // Decrement concurrent processing gauge
         didsConcurrentProcessing.dec();
       }
     }),

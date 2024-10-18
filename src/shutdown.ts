@@ -1,4 +1,3 @@
-// src/shutdown.ts
 import { closeDatabase } from './db/postgres.js';
 import { postBatchQueue, profileBatchQueue } from './db/postgresBatchQueues.js';
 import { stopMetricsServer } from './metrics.js';
