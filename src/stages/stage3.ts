@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { timeStamp } from 'console';
 import emojiRegexFunc from 'emoji-regex';
 import pLimit from 'p-limit';
 
@@ -72,17 +73,27 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const postData = post.value as unknown as BskyPostData;
                       const rkeyParts = k.split('/');
                       const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
-                      let sanitizedCreatedAt = '';
+                      let timestamp = '';
+                      let isValid = false;
                       if (!postData.createdAt) {
-                        sanitizedCreatedAt = '1970-01-01T00:00:00.000Z';
+                        timestamp = '1970-01-01T00:00:00.000Z';
                       } else {
-                        // eslint-disable-next-line prefer-const
-                        let { timestamp: sanitizedCreatedAt, isValid } = sanitizeTimestamp(postData.createdAt);
+                        const result = sanitizeTimestamp(postData.createdAt);
+                        timestamp = result.timestamp;
+                        isValid = result.isValid;
                         if (!isValid) {
                           console.log(`DID: ${did}`);
+                          console.log(`rkey: ${rkey}`);
+                          console.log(`cid: ${postData.cid}`);
                           console.error(`Invalid timestamp: ${postData.createdAt}`);
-                          sanitizedCreatedAt = '1970-01-01T00:00:00.000Z';
                         }
+                      }
+
+                      timestamp = timestamp || '1970-01-01T00:00:00.000Z';
+                      if (timestamp === '1970-01-01T00:00:00.000Z') {
+                        console.warn(`Epoch zero for DID: ${did}`);
+                        console.warn(`rkey: ${rkey}`);
+                        console.warn(`cid: ${postData.cid}`);
                       }
 
                       let langs = new Set<string>();
@@ -104,7 +115,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                         langs: Array.from(langs),
                         emojis: normalizedEmojis,
                         post: sanitizeString(postData.text),
-                        createdAt: sanitizedCreatedAt,
+                        createdAt: timestamp,
                       };
                       postBatchQueue.enqueue(data).catch((err: unknown) => {
                         console.error(`Post data enqueue error for DID ${did}: ${(err as Error).message}`);
@@ -125,17 +136,27 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       const profileData = profile.value as unknown as BskyProfileData;
                       const rkeyParts = k.split('/');
                       const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
-                      let sanitizedCreatedAt = '';
+                      let timestamp = '';
+                      let isValid = false;
                       if (!profileData.createdAt) {
-                        sanitizedCreatedAt = '1970-01-01T00:00:00.000Z';
+                        timestamp = '1970-01-01T00:00:00.000Z';
                       } else {
-                        // eslint-disable-next-line prefer-const
-                        let { timestamp: sanitizedCreatedAt, isValid } = sanitizeTimestamp(profileData.createdAt);
+                        const result = sanitizeTimestamp(profileData.createdAt);
+                        timestamp = result.timestamp;
+                        isValid = result.isValid;
                         if (!isValid) {
                           console.log(`DID: ${did}`);
+                          console.log(`rkey: ${rkey}`);
+                          console.log(`cid: ${profileData.cid}`);
                           console.error(`Invalid timestamp: ${profileData.createdAt}`);
-                          sanitizedCreatedAt = '1970-01-01T00:00:00.000Z';
                         }
+                      }
+
+                      timestamp = timestamp || '1970-01-01T00:00:00.000Z';
+                      if (timestamp === '1970-01-01T00:00:00.000Z') {
+                        console.warn(`Epoch zero for DID: ${did}`);
+                        console.warn(`rkey: ${rkey}`);
+                        console.warn(`cid: ${profileData.cid}`);
                       }
                       const displayNameEmojiMatches = profileData.displayName?.match(emojiRegex) ?? [];
                       const descriptionEmojiMatches = profileData.description?.match(emojiRegex) ?? [];
@@ -150,7 +171,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                         rkey: sanitizeString(rkey),
                         displayName: sanitizeString(profileData.displayName ?? ''),
                         description: sanitizeString(profileData.description ?? ''),
-                        createdAt: sanitizedCreatedAt,
+                        createdAt: timestamp,
                         hasDisplayNameEmojis: hasDisplayNameEmojis,
                         hasDescriptionEmojis: hasDescriptionEmojis,
                         displayNameEmojis: normalizedDisplayNameEmojis,
