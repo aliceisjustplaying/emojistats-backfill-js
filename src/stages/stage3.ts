@@ -86,14 +86,15 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                           console.log(`rkey: ${rkey}`);
                           console.log(`cid: ${postData.cid}`);
                           console.error(`Invalid timestamp: ${postData.createdAt}`);
+                          timestamp = '1970-01-01T00:00:00.000Z';
                         }
                       }
 
-                      timestamp = timestamp || '1970-01-01T00:00:00.000Z';
-                      if (timestamp === '1970-01-01T00:00:00.000Z') {
-                        console.warn(`Epoch zero for DID: ${did}`);
-                        console.warn(`rkey: ${rkey}`);
-                        console.warn(`cid: ${postData.cid}`);
+                      if (typeof timestamp === 'undefined') {
+                        console.error(`Timestamp is undefined for DID: ${did}`);
+                        console.error(`rkey: ${rkey}`);
+                        console.error(`cid: ${postData.cid}`);
+                        timestamp = '1970-01-01T00:00:00.000Z';
                       }
 
                       let langs = new Set<string>();
@@ -149,15 +150,17 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                           console.log(`rkey: ${rkey}`);
                           console.log(`cid: ${profileData.cid}`);
                           console.error(`Invalid timestamp: ${profileData.createdAt}`);
+                          timestamp = '1970-01-01T00:00:00.000Z';
                         }
                       }
 
-                      timestamp = timestamp || '1970-01-01T00:00:00.000Z';
-                      if (timestamp === '1970-01-01T00:00:00.000Z' && rkey !== 'self') {
-                        console.warn(`Epoch zero for DID: ${did}`);
-                        console.warn(`rkey: ${rkey}`);
-                        console.warn(`cid: ${profileData.cid}`);
+                      if (typeof timestamp === 'undefined') {
+                        console.error(`Timestamp is undefined for DID: ${did}`);
+                        console.error(`rkey: ${rkey}`);
+                        console.error(`cid: ${profileData.cid}`);
+                        timestamp = '1970-01-01T00:00:00.000Z';
                       }
+
                       const displayNameEmojiMatches = profileData.displayName?.match(emojiRegex) ?? [];
                       const descriptionEmojiMatches = profileData.description?.match(emojiRegex) ?? [];
                       const normalizedDisplayNameEmojis = batchNormalizeEmojis(displayNameEmojiMatches);

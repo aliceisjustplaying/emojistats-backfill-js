@@ -101,8 +101,10 @@ export class PostgresBatchQueue<T> {
           console.log(`Retrying in ${backoffTime} ms...`);
           await new Promise((resolve) => setTimeout(resolve, backoffTime));
         } else {
-          console.error('Max retries reached. Re-queueing the batch.');
-          throw error; // Let the caller handle re-queueing
+          // console.error('Max retries reached. Re-queueing the batch.');
+          console.error('Max retries reached. This is bad. Exiting.');
+          process.exit(1);
+          // throw error; // Let the caller handle re-queueing
         }
       }
     }

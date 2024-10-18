@@ -53,17 +53,25 @@ export function sanitizeTimestamp(timestamp: string | undefined | null): { times
 
   const LOW_YEAR = -4711;
   const HIGH_YEAR = 294275;
-  const sanitizedTimestamp = timestamp.startsWith('0000-') ? timestamp.replace('0000-', '0001-') : timestamp;
+
+  if (timestamp.startsWith('0000-')) {
+    timestamp = timestamp.replace('0000-', '0001-');
+    if (!isNaN(new Date(timestamp).getTime())) {
+      return { timestamp: timestamp, isValid: true };
+    } else {
+      return { timestamp: '', isValid: false };
+    }
+  }
 
   let isValid = false;
-  const date = new Date(sanitizedTimestamp);
+  const date = new Date(timestamp);
 
   if (!isNaN(date.getTime())) {
     const year = date.getFullYear();
     isValid = year >= LOW_YEAR && year <= HIGH_YEAR;
   }
 
-  return { timestamp: sanitizedTimestamp, isValid: isValid };
+  return { timestamp: timestamp, isValid: isValid };
 }
 
 export function emojiToCodePoint(emoji: string): string {
