@@ -71,7 +71,7 @@ export class PostgresBatchQueue<T> {
 
     try {
       await this.attemptFlush(currentBatch);
-      process.stdout.write('.');
+      // process.stdout.write('.');
       // console.log(`Flushed batch of ${currentBatch.length} items.`);
     } catch (error) {
       console.error(`Error flushing PostgreSQL batch: ${(error as Error).message}`);
