@@ -1,5 +1,4 @@
 import axios from 'axios';
-import { timeStamp } from 'console';
 import emojiRegexFunc from 'emoji-regex';
 import pLimit from 'p-limit';
 
