@@ -153,7 +153,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                       }
 
                       timestamp = timestamp || '1970-01-01T00:00:00.000Z';
-                      if (timestamp === '1970-01-01T00:00:00.000Z') {
+                      if (timestamp === '1970-01-01T00:00:00.000Z' && rkey !== 'self') {
                         console.warn(`Epoch zero for DID: ${did}`);
                         console.warn(`rkey: ${rkey}`);
                         console.warn(`cid: ${profileData.cid}`);
