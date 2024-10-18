@@ -95,6 +95,7 @@ export class PostgresBatchQueue<T> {
       } catch (error) {
         attempt++;
         console.error(`Flush attempt ${attempt} failed: ${(error as Error).message}`);
+        console.dir(batch, { depth: null });
 
         if (attempt < MAX_FLUSH_RETRIES) {
           const backoffTime = 2 ** attempt * 1000;

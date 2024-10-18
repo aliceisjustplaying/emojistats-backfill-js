@@ -17,3 +17,4 @@ export const BATCH_SIZE = 1000; // Number of postgres records per batch
 export const EMOJI_BATCH_SIZE = 1000; // Number of emoji records per batch
 export const BATCH_TIMEOUT_MS = 1000; // how long to wait for a batch to fill before flushing
 export const MAX_FLUSH_RETRIES = 5; // Maximum number of retry attempts for flushing
+export const DENYLIST = ['did:plc:2ymwswvzjclhrcnhn7u6mxsk'];

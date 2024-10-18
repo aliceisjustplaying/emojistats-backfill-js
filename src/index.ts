@@ -1,4 +1,4 @@
-import { DIDS_TO_PROCESS, METRICS_PORT } from './constants.js';
+import { DENYLIST, DIDS_TO_PROCESS, METRICS_PORT } from './constants.js';
 import { startMetricsServer } from './metrics.js';
 import { redis } from './redis.js';
 import { gracefulShutdown, registerShutdownHandlers } from './shutdown.js';
@@ -26,9 +26,10 @@ async function main() {
 
   // stage 3
   const didsToProcess = allDids.slice(0, DIDS_TO_PROCESS);
-  console.log(`Processing ${didsToProcess.length} DIDs`);
+  const filteredDids = didsToProcess.filter((did) => !DENYLIST.includes(did.did));
+  console.log(`Processing ${filteredDids.length} DIDs`);
 
-  await processDidsAndFetchData(didsToProcess);
+  await processDidsAndFetchData(filteredDids);
 
   await gracefulShutdown();
 }

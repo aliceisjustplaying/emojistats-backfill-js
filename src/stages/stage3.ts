@@ -104,9 +104,16 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                         langs.add('unknown');
                       }
 
-                      const emojiMatches = postData.text.match(emojiRegex) ?? [];
-                      const normalizedEmojis = batchNormalizeEmojis(emojiMatches);
-                      const hasEmojis = normalizedEmojis.length > 0;
+                      let hasEmojis = false;
+                      let emojiMatches: RegExpMatchArray | [] | undefined = [];
+                      let normalizedEmojis: string[] = [];
+                      if (postData.text && typeof postData.text === 'string') {
+                        emojiMatches = postData.text.match(emojiRegex) ?? [];
+                        normalizedEmojis = batchNormalizeEmojis(emojiMatches);
+                        hasEmojis = normalizedEmojis.length > 0;
+                      } else {
+                        postData.text = '';
+                      }
 
                       const data: PostData = {
                         cid: postData.cid,
