@@ -183,6 +183,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
           );
 
           context.successfulRequests++;
+          didsSuccessfulTotal.inc();
 
           // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
           await processStream(res.data, did, context);
