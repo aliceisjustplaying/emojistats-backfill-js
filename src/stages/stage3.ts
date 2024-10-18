@@ -208,7 +208,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
     }),
   );
 
-  const chunkedTasks = chunkArray(tasks, 100_000);
+  const chunkedTasks = chunkArray(tasks, SUCCESSFUL_DIDS_LOG_INTERVAL);
   for (const chunk of chunkedTasks) {
     try {
       await Promise.all(chunk);
