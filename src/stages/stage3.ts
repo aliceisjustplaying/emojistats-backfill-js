@@ -208,7 +208,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
     }),
   );
 
-  const chunkedTasks = chunkArray(tasks, SUCCESSFUL_DIDS_LOG_INTERVAL);
+  const chunkedTasks = chunkArray(tasks, Math.floor(SUCCESSFUL_DIDS_LOG_INTERVAL / 10));
   for (const chunk of chunkedTasks) {
     try {
       await Promise.all(chunk);
@@ -288,9 +288,9 @@ async function processStream(stream: NodeJS.ReadableStream, did: string, context
       console.error(`Redis set error for DID ${did}: ${(redisError as Error).message}`);
     }
 
-    didsProcessedTotal.inc();
-
     throw err;
+  } finally {
+    didsProcessedTotal.inc();
   }
 }
 
