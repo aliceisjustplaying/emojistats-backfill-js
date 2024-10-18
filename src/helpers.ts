@@ -46,32 +46,49 @@ export async function isPDSHealthy(pds: string) {
   }
 }
 
-export function sanitizeTimestamp(timestamp: string | undefined | null): { timestamp: string; isValid: boolean } {
+export function sanitizeTimestamp(timestamp: string | undefined | null): { timestamp: string; wasWeird: boolean } {
+  const defaultTimestamp = '1970-01-01T00:00:00.000Z';
+
+  // If there is no timestamp, return the default timestamp
   if (!timestamp) {
-    return { timestamp: '', isValid: false };
+    return { timestamp: defaultTimestamp, wasWeird: false };
   }
 
-  const LOW_YEAR = -4711;
-  const HIGH_YEAR = 294275;
+  let wasWeird = false;
 
+  // No such thing as year 0 in the Gregorian calendar
   if (timestamp.startsWith('0000-')) {
+    console.warn(`Sanitizing timestamp: ${timestamp}`);
     timestamp = timestamp.replace('0000-', '0001-');
-    if (!isNaN(new Date(timestamp).getTime())) {
-      return { timestamp: timestamp, isValid: true };
-    } else {
-      return { timestamp: '', isValid: false };
-    }
+    wasWeird = true;
   }
 
-  let isValid = false;
   const date = new Date(timestamp);
 
-  if (!isNaN(date.getTime())) {
-    const year = date.getFullYear();
-    isValid = year >= LOW_YEAR && year <= HIGH_YEAR;
+  // If the timestamp is not a valid date, return the default timestamp
+  if (isNaN(date.getTime())) {
+    return { timestamp: defaultTimestamp, wasWeird: true };
   }
 
-  return { timestamp: timestamp, isValid: isValid };
+  const LOW_YEAR = 1; // Since Bluesky uses Go, dates don't go back further than 1AD
+  const HIGH_YEAR = 294275;
+
+  const SANE_LOW_YEAR = 2022;
+  const SANE_HIGH_YEAR = 2025;
+
+  const year = date.getFullYear();
+  if (year >= LOW_YEAR && year <= HIGH_YEAR) {
+    if (year >= SANE_LOW_YEAR && year <= SANE_HIGH_YEAR) {
+      // sane year, valid date
+      return { timestamp: date.toISOString(), wasWeird: false };
+    }
+
+    // weird year, but valid date
+    return { timestamp: date.toISOString(), wasWeird: true };
+  }
+
+  // invalid date in some way
+  return { timestamp: defaultTimestamp, wasWeird: true };
 }
 
 export function emojiToCodePoint(emoji: string): string {
@@ -122,7 +139,10 @@ export function lowercaseObject<T>(input: T): T {
   return input;
 }
 
-export function sanitizeString(input: string): string {
+export function sanitizeString(input: string | undefined | null): string {
+  if (!input) {
+    return '';
+  }
   // eslint-disable-next-line no-control-regex
   return input.replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '').trim();
 }

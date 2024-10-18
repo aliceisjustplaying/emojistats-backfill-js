@@ -21,6 +21,29 @@ import {
 
 const emojiRegex: RegExp = emojiRegexFunc();
 
+export function processLanguages(langs?: string[]): Set<string> {
+  const languageSet = new Set<string>();
+  if (Array.isArray(langs) && langs.length > 0) {
+    return new Set(langs);
+  }
+  languageSet.add('unknown');
+  return languageSet;
+}
+
+export function extractEmojis(text: string | undefined | null): { hasEmojis: boolean; normalizedEmojis: string[] } {
+  let hasEmojis = false;
+  let emojiMatches: RegExpMatchArray | [] | undefined = [];
+  let normalizedEmojis: string[] = [];
+  if (typeof text === 'string') {
+    emojiMatches = text.match(emojiRegex) ?? [];
+    normalizedEmojis = batchNormalizeEmojis(emojiMatches);
+    hasEmojis = normalizedEmojis.length > 0;
+  } else {
+    hasEmojis = false;
+  }
+  return { hasEmojis, normalizedEmojis };
+}
+
 export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> {
   const limit = pLimit(PDS_DATA_FETCH_CONCURRENCY);
   let successfulRequests = 0;
@@ -70,49 +93,19 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                     if (k.includes('app.bsky.feed.post')) {
                       const post = v as BskyPost;
                       const postData = post.value as unknown as BskyPostData;
-                      const rkeyParts = k.split('/');
-                      const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
-                      let timestamp = '';
-                      let isValid = false;
-                      if (!postData.createdAt) {
-                        timestamp = '1970-01-01T00:00:00.000Z';
-                      } else {
-                        const result = sanitizeTimestamp(postData.createdAt);
-                        timestamp = result.timestamp;
-                        isValid = result.isValid;
-                        if (!isValid) {
-                          console.log(`DID: ${did}`);
-                          console.log(`rkey: ${rkey}`);
-                          console.log(`cid: ${postData.cid}`);
-                          console.error(`Invalid timestamp: ${postData.createdAt}`);
-                          timestamp = '1970-01-01T00:00:00.000Z';
-                        }
+                      const rkey = sanitizeString(k.split('/').pop()); // the format is app.bsky.feed.post/rkey
+                      const { timestamp, wasWeird } = sanitizeTimestamp(postData.createdAt);
+
+                      if (wasWeird) {
+                        console.error(`Weird timestamp for DID: ${did}
+                          rkey: ${rkey}
+                          cid: ${postData.cid}
+                          createdAt: ${timestamp}`);
                       }
 
-                      if (typeof timestamp === 'undefined') {
-                        console.error(`Timestamp is undefined for DID: ${did}`);
-                        console.error(`rkey: ${rkey}`);
-                        console.error(`cid: ${postData.cid}`);
-                        timestamp = '1970-01-01T00:00:00.000Z';
-                      }
-
-                      let langs = new Set<string>();
-                      if (Array.isArray(postData.langs) && postData.langs.length > 0) {
-                        langs = new Set(postData.langs);
-                      } else {
-                        langs.add('unknown');
-                      }
-
-                      let hasEmojis = false;
-                      let emojiMatches: RegExpMatchArray | [] | undefined = [];
-                      let normalizedEmojis: string[] = [];
-                      if (postData.text && typeof postData.text === 'string') {
-                        emojiMatches = postData.text.match(emojiRegex) ?? [];
-                        normalizedEmojis = batchNormalizeEmojis(emojiMatches);
-                        hasEmojis = normalizedEmojis.length > 0;
-                      } else {
-                        postData.text = '';
-                      }
+                      const langs = processLanguages(postData.langs);
+                      const text = sanitizeString(postData.text);
+                      const { hasEmojis, normalizedEmojis } = extractEmojis(text);
 
                       const data: PostData = {
                         cid: postData.cid,
@@ -121,7 +114,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                         hasEmojis: hasEmojis,
                         langs: Array.from(langs),
                         emojis: normalizedEmojis,
-                        post: sanitizeString(postData.text),
+                        post: text,
                         createdAt: timestamp,
                       };
                       postBatchQueue.enqueue(data).catch((err: unknown) => {
@@ -141,45 +134,27 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
                     } else if (k.includes('app.bsky.actor.profile')) {
                       const profile = v as BskyProfile;
                       const profileData = profile.value as unknown as BskyProfileData;
-                      const rkeyParts = k.split('/');
-                      const rkey = rkeyParts.length > 1 ? rkeyParts[1] : k;
-                      let timestamp = '';
-                      let isValid = false;
-                      if (!profileData.createdAt) {
-                        timestamp = '1970-01-01T00:00:00.000Z';
-                      } else {
-                        const result = sanitizeTimestamp(profileData.createdAt);
-                        timestamp = result.timestamp;
-                        isValid = result.isValid;
-                        if (!isValid) {
-                          console.log(`DID: ${did}`);
-                          console.log(`rkey: ${rkey}`);
-                          console.log(`cid: ${profileData.cid}`);
-                          console.error(`Invalid timestamp: ${profileData.createdAt}`);
-                          timestamp = '1970-01-01T00:00:00.000Z';
-                        }
+                      const rkey = sanitizeString(k.split('/').pop()); // the format is app.bsky.actor.profile/rkey
+                      const { timestamp, wasWeird } = sanitizeTimestamp(profileData.createdAt);
+
+                      if (wasWeird) {
+                        console.error(`Weird timestamp for DID: ${did}
+                          rkey: ${rkey}
+                          cid: ${profileData.cid}
+                          createdAt: ${timestamp}`);
                       }
 
-                      if (typeof timestamp === 'undefined') {
-                        console.error(`Timestamp is undefined for DID: ${did}`);
-                        console.error(`rkey: ${rkey}`);
-                        console.error(`cid: ${profileData.cid}`);
-                        timestamp = '1970-01-01T00:00:00.000Z';
-                      }
-
-                      const displayNameEmojiMatches = profileData.displayName?.match(emojiRegex) ?? [];
-                      const descriptionEmojiMatches = profileData.description?.match(emojiRegex) ?? [];
-                      const normalizedDisplayNameEmojis = batchNormalizeEmojis(displayNameEmojiMatches);
-                      const normalizedDescriptionEmojis = batchNormalizeEmojis(descriptionEmojiMatches);
-                      const hasDisplayNameEmojis = normalizedDisplayNameEmojis.length > 0;
-                      const hasDescriptionEmojis = normalizedDescriptionEmojis.length > 0;
+                      const { hasEmojis: hasDisplayNameEmojis, normalizedEmojis: normalizedDisplayNameEmojis } =
+                        extractEmojis(profileData.displayName);
+                      const { hasEmojis: hasDescriptionEmojis, normalizedEmojis: normalizedDescriptionEmojis } =
+                        extractEmojis(profileData.description);
 
                       const data: ProfileData = {
                         cid: profileData.cid,
                         did: did,
-                        rkey: sanitizeString(rkey),
-                        displayName: sanitizeString(profileData.displayName ?? ''),
-                        description: sanitizeString(profileData.description ?? ''),
+                        rkey: rkey,
+                        displayName: sanitizeString(profileData.displayName),
+                        description: sanitizeString(profileData.description),
                         createdAt: timestamp,
                         hasDisplayNameEmojis: hasDisplayNameEmojis,
                         hasDescriptionEmojis: hasDescriptionEmojis,
