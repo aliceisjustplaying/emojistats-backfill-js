@@ -3,3 +3,4 @@ node_modules
 bun.lockb
 dids_pds.jsonl
 pds_health.json
+*.log
