@@ -67,13 +67,14 @@ async function processPost(key: string, value: unknown, did: string): Promise<vo
   if (rkey === '') {
     rkey = Math.random().toString(36).substring(2, 15);
   }
-  const { timestamp, wasWeird } = sanitizeTimestamp(postData.createdAt);
+  const { timestamp, wasWeird, defaulted } = sanitizeTimestamp(postData.createdAt);
 
   if (wasWeird) {
-    console.error(`Weird timestamp for DID: ${did}
+    console.error(`Weird post timestamp for DID: ${did}
       rkey: ${rkey}
       cid: ${postData.cid}
-      createdAt: ${timestamp}`);
+      original createdAt: ${postData.createdAt}
+      sanitized createdAt: ${timestamp}`);
   }
 
   const langs = processLanguages(postData.langs);
@@ -108,10 +109,10 @@ async function processProfile(key: string, value: unknown, did: string): Promise
   if (rkey === '') {
     rkey = Math.random().toString(36).substring(2, 15);
   }
-  const { timestamp, wasWeird } = sanitizeTimestamp(profileData.createdAt);
+  const { timestamp, wasWeird, defaulted } = sanitizeTimestamp(profileData.createdAt);
 
   if (wasWeird) {
-    console.error(`Weird timestamp for DID: ${did}
+    console.error(`Weird profiletimestamp for DID: ${did}
       rkey: ${rkey}
       cid: ${profileData.cid}
       createdAt: ${timestamp}`);
