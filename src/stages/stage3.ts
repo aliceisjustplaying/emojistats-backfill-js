@@ -210,7 +210,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
     }),
   );
 
-  const chunkedTasks = chunkArray(tasks, 10000);
+  const chunkedTasks = chunkArray(tasks, 100_000);
   for (const chunk of chunkedTasks) {
     try {
       await Promise.all(chunk);
