@@ -4,9 +4,5 @@
   "semi": true,
   "singleQuote": true,
   "printWidth": 120,
-  "experimentalTernaries": true,
-  "plugins": ["@trivago/prettier-plugin-sort-imports"],
-  "importOrder": ["^[./]"],
-  "importOrderSeparation": true,
-  "importOrderSortSpecifiers": true
+  "experimentalTernaries": true
 }

@@ -1,16 +1,15 @@
-import fs from 'node:fs';
-
 import { codePointToEmoji, emojiToCodePoint } from './helpers/emoji.js';
 import { lowercaseObject } from './helpers/generic.js';
-import { Emoji, EmojiVariationSequence } from './types.js';
+import emojiVariationSequences from './data/emojiVariationSequences.json' with { type: 'json' };
+import emojiData from './data/emoji.json' with { type: 'json' };
 
 // Load and parse normalization data
 // Converted from: https://unicode.org/Public/emoji/12.1/emoji-variation-sequences.txt
 // Regex in Sublime Text form:
 // Find: ([0-9A-F]{4,5}) +FE0E +; +.+? style; +\# \((\d.\d)\) ([A-Z0-9\- ]+)\n[0-9A-F]{4,5} +FE0F +; +.+? style; +\# \(\d.\d\) [A-Z0-9\- ]+\n
 // Replace: {"code": "$1", "textStyle": "$1 FE0E", "emojiStyle": "$1 FE0F", "version": "$2", "name": "$3"},\n
-const eVSPath = new URL('./data/emojiVariationSequences.json', import.meta.url);
-const eJSONPath = new URL('./data/emoji.json', import.meta.url);
+// const eVSPath = new URL('./data/emojiVariationSequences.json', import.meta.url);
+// const eJSONPath = new URL('./data/emoji.json', import.meta.url);
 
 // Initialize normalization maps as Maps for faster lookups
 const normalizationMap = new Map<string, string>();
@@ -20,15 +19,7 @@ const nonQualifiedMap = new Map<string, string>();
 const normalizationCache = new Map<string, string>();
 
 // Function to load and process normalization data asynchronously
-async function initializeNormalizationMaps() {
-  const [eVSData, eJSONData] = await Promise.all([
-    fs.promises.readFile(eVSPath, 'utf8'),
-    fs.promises.readFile(eJSONPath, 'utf8'),
-  ]);
-
-  const emojiVariationSequences: EmojiVariationSequence[] = JSON.parse(eVSData) as EmojiVariationSequence[];
-  const emojiData: Emoji[] = JSON.parse(eJSONData) as Emoji[];
-
+function initializeNormalizationMaps() {
   for (const seq of emojiVariationSequences) {
     normalizationMap.set(seq.code.toLowerCase(), seq.emojiStyle);
     normalizationMap.set(seq.textStyle.toLowerCase(), seq.emojiStyle);
@@ -61,13 +52,10 @@ async function initializeNormalizationMaps() {
 }
 
 // Initialize the maps at startup
-initializeNormalizationMaps().catch((error: unknown) => {
-  console.error('Failed to initialize normalization maps:', error);
-  process.exit(1);
-});
+initializeNormalizationMaps();
 
 export function normalizeEmoji(emoji: string): string {
-  if (normalizationCache.has(emoji)) {
+  if (emoji in normalizationCache) {
     return normalizationCache.get(emoji)!;
   }
 

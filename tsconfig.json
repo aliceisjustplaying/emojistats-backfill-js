@@ -6,6 +6,7 @@
     "moduleResolution": "NodeNext",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "types": ["node"]
+    "types": ["node"],
+    "resolveJsonModule": true
   }
 }
