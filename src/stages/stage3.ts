@@ -1,3 +1,5 @@
+import { iterateAtpRepo } from '@atcute/car';
+import { CredentialManager, XRPC } from '@atcute/client';
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import emojiRegexFunc from 'emoji-regex';
@@ -60,10 +62,10 @@ function extractEmojis(text: string | undefined | null): { hasEmojis: boolean; n
   return { hasEmojis, normalizedEmojis };
 }
 
-async function processPost(key: string, value: unknown, did: string): Promise<void> {
-  const post = value as BskyPost;
-  const postData = post.value as unknown as BskyPostData;
-  let rkey = sanitizeString(key.split('/').pop());
+async function processPost(rkey: string, record: unknown, did: string, cid: string): Promise<void> {
+  const postData = record as BskyPostData;
+  // console.dir(postData, { depth: null });
+  // const postData = post.value as unknown as BskyPostData;
   // This is probably too paranoid but you never know with Bluesky
   if (rkey === '') {
     rkey = Math.random().toString(36).substring(2, 15);
@@ -73,7 +75,7 @@ async function processPost(key: string, value: unknown, did: string): Promise<vo
   if (wasWeird) {
     console.error(`Weird post timestamp for DID: ${did}
       rkey: ${rkey}
-      cid: ${postData.cid}
+      cid: ${cid}
       original createdAt: ${postData.createdAt}
       sanitized createdAt: ${timestamp}`);
   }
@@ -83,7 +85,7 @@ async function processPost(key: string, value: unknown, did: string): Promise<vo
   const { hasEmojis, normalizedEmojis } = extractEmojis(text);
 
   const data: PostData = {
-    cid: postData.cid,
+    cid,
     did,
     rkey: sanitizeString(rkey),
     hasEmojis,
@@ -102,10 +104,9 @@ async function processPost(key: string, value: unknown, did: string): Promise<vo
   }
 }
 
-async function processProfile(key: string, value: unknown, did: string): Promise<void> {
-  const profile = value as BskyProfile;
-  const profileData = profile.value as unknown as BskyProfileData;
-  let rkey = sanitizeString(key.split('/').pop());
+async function processProfile(rkey: string, record: unknown, did: string, cid: string): Promise<void> {
+  const profileData = record as BskyProfileData;
+  // const profileData = profile.value as unknown as BskyProfileData;
   // This is probably too paranoid but you never know with Bluesky
   if (rkey === '') {
     rkey = Math.random().toString(36).substring(2, 15);
@@ -115,7 +116,7 @@ async function processProfile(key: string, value: unknown, did: string): Promise
   if (wasWeird) {
     console.error(`Weird profiletimestamp for DID: ${did}
       rkey: ${rkey}
-      cid: ${profileData.cid}
+      cid: ${cid}
       createdAt: ${timestamp}`);
   }
 
@@ -127,7 +128,7 @@ async function processProfile(key: string, value: unknown, did: string): Promise
   );
 
   const data: ProfileData = {
-    cid: profileData.cid,
+    cid,
     did,
     rkey,
     displayName: sanitizeString(profileData.displayName),
@@ -152,7 +153,7 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
   const limit = pLimit(PDS_DATA_FETCH_CONCURRENCY);
 
   axiosRetry(axios, {
-    retries: 10,
+    retries: 1,
     // eslint-disable-next-line @typescript-eslint/unbound-method
     retryDelay: axiosRetry.exponentialDelay,
     onRetry: (retryCount, error) => {
@@ -183,19 +184,14 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
         await redis.set(`${did}:status`, 'processing');
 
         try {
-          const res = await axios.post(
-            'http://localhost:8000/fetch',
-            { did, pds },
-            {
-              responseType: 'stream',
-              timeout: PYTHON_SERVICE_TIMEOUT_MS,
-            },
-          );
+          const res = await axios.get(`https://${pds}/xrpc/com.atproto.sync.getRepo?did=${did}`, {
+            timeout: PYTHON_SERVICE_TIMEOUT_MS,
+            responseType: 'arraybuffer',
+          });
 
           context.successfulRequests++;
-
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
-          await processStream(res.data, did, context);
+          await processAtcuteRepo(res.data as Uint8Array, did, context);
+          // await processStream(res.data, did, context);
         } catch (error) {
           if (!(error as Error).message.includes('Request failed with status code 502')) {
             console.error(`Error with DID ${did}: ${error as Error}`);
@@ -235,6 +231,21 @@ export async function processDidsAndFetchData(dids: DidAndPds[]): Promise<void> 
   console.log(
     `Successful DIDs: ${context.successfulDids}, Failed DIDs: ${context.failedDids}, Retry DIDs: ${context.retryDids}`,
   );
+}
+
+async function processAtcuteRepo(data: Uint8Array, did: string, context: ProcessingContext): Promise<void> {
+  const processingTasks: Promise<void>[] = [];
+
+  for (const { collection, rkey, record, cid } of iterateAtpRepo(data)) {
+    if (collection.includes('app.bsky.feed.post')) {
+      processingTasks.push(processPost(rkey, record, did, cid.$link));
+    } else if (collection.includes('app.bsky.actor.profile')) {
+      processingTasks.push(processProfile(rkey, record, did, cid.$link));
+    }
+  }
+
+  await Promise.all(processingTasks);
+  context.successfulDids++;
 }
 
 async function processStream(stream: NodeJS.ReadableStream, did: string, context: ProcessingContext): Promise<void> {
