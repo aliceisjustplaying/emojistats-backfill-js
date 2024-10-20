@@ -1,4 +1,4 @@
-[
+export const EMOJI = [
   {
     "name": "HASH KEY",
     "unified": "0023-FE0F-20E3",
@@ -68969,4 +68969,4 @@
     "has_img_twitter": true,
     "has_img_facebook": true
   }
-]
+  ] as const

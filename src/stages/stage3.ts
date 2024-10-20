@@ -1,5 +1,4 @@
 import { iterateAtpRepo } from '@atcute/car';
-import { CredentialManager, XRPC } from '@atcute/client';
 import axios from 'axios';
 import axiosRetry from 'axios-retry';
 import emojiRegexFunc from 'emoji-regex';
@@ -21,9 +20,7 @@ import {
 import { redis } from '../redis.js';
 import {
   BskyData,
-  BskyPost,
   BskyPostData,
-  BskyProfile,
   BskyProfileData,
   DidAndPds,
   DidProcessingStatus,
@@ -70,7 +67,7 @@ async function processPost(rkey: string, record: unknown, did: string, cid: stri
   if (rkey === '') {
     rkey = Math.random().toString(36).substring(2, 15);
   }
-  const { timestamp, wasWeird, defaulted } = sanitizeTimestamp(postData.createdAt);
+  const { timestamp, wasWeird } = sanitizeTimestamp(postData.createdAt);
 
   if (wasWeird) {
     console.error(`Weird post timestamp for DID: ${did}
@@ -111,7 +108,7 @@ async function processProfile(rkey: string, record: unknown, did: string, cid: s
   if (rkey === '') {
     rkey = Math.random().toString(36).substring(2, 15);
   }
-  const { timestamp, wasWeird, defaulted } = sanitizeTimestamp(profileData.createdAt);
+  const { timestamp, wasWeird } = sanitizeTimestamp(profileData.createdAt);
 
   if (wasWeird) {
     console.error(`Weird profiletimestamp for DID: ${did}
